@@ -1,0 +1,56 @@
+# Procedural pairs plus pairs written by an LLM, with a second LLM judging every pair.
+# Backends are OpenAI-compatible endpoints. Use different model families for the writer and
+# the judge, and for the models you will evaluate (the manifest warns otherwise).
+
+[run]
+name = "castellanismes_full"
+target_size = 5000
+seed = 1
+pool_multiplier = 1.3
+max_rounds = 5
+evaluated_models = []
+
+[[sources]]
+type = "procedural"
+task = "castellanismes_verbals"
+weight = 1.0
+
+[sources.params]
+tenses = ["present", "imperfect", "future", "conditional", "periphrastic_past", "perfect"]
+formats = ["mcq", "judgement", "gec"]
+
+[[sources]]
+type = "llm"
+task = "castellanismes_verbals"
+backend = "writer"
+count = 600
+batch_size = 20
+max_fix_attempts = 2
+formats = ["mcq", "judgement", "gec"]
+
+[checks.languagetool]
+enabled = true
+url = "http://localhost:8081"
+
+[judge]
+enabled = true
+backend = "judge"
+mode = "filter"        # or "audit" with sample_rate
+on_error = "reject"    # or "keep"; either way it is recorded on each pair
+workers = 4
+
+[backends.writer]
+base_url = "http://localhost:8000/v1"   # e.g. vLLM serving an open model
+model = "Qwen/Qwen2.5-72B-Instruct"
+temperature = 0.9
+
+[backends.judge]
+base_url = "https://api.openai.com/v1"
+model = "gpt-4o"
+api_key_env = "OPENAI_API_KEY"
+temperature = 0.0
+
+[min_share.phenomenon]
+tenir_que = 0.3
+hi_ha_que = 0.3
+donar_se_compte = 0.3

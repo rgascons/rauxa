@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
@@ -50,6 +51,12 @@ def create_curriculum(name: str) -> BaseCurriculum:
     if entry.curriculum_cls is None:
         raise ValueError(f"dataset '{name}' has no curriculum")
     return entry.curriculum_cls()
+
+
+def get_phenomenon_info(name: str) -> dict[str, dict[str, Any]]:
+    """Per-phenomenon info (error, correction, LanguageTool rules, marker) of task ``name``."""
+    module = sys.modules[_get(name).dataset_cls.__module__]
+    return getattr(module, "PHENOMENON_INFO", {})
 
 
 def get_score_answer_fn(name: str) -> Callable[[Optional[str], dict[str, Any]], float]:

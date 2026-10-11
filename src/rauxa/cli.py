@@ -1,4 +1,4 @@
-"""Command-line interface: ``rauxa list | generate | qc | export-lm-eval``."""
+"""Command-line interface: ``rauxa list | generate | run | qc | review | calibrate | export-lm-eval``."""
 
 from __future__ import annotations
 
@@ -80,6 +80,34 @@ def cmd_export_lm_eval(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_run(args: argparse.Namespace) -> int:
+    from .pipeline import Pipeline, PipelineError, load_config
+
+    config = load_config(args.config)
+    try:
+        result = Pipeline(config, resume=args.resume).run()
+    except PipelineError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    print(result.path)
+    return 0 if result.status == "complete" else 2
+
+
+def cmd_review(args: argparse.Namespace) -> int:
+    from .pipeline.calibration import review
+
+    n = review(Path(args.items), Path(args.labels), n=args.n, seed=args.seed, reviewer=args.reviewer)
+    print(f"{n} items labelled → {args.labels}", file=sys.stderr)
+    return 0
+
+
+def cmd_calibrate(args: argparse.Namespace) -> int:
+    from .pipeline.calibration import calibrate
+
+    print(json.dumps(calibrate(Path(args.labels), Path(args.run_dir)), ensure_ascii=False, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="rauxa", description="Procedural generator of verifiable Catalan tasks.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -109,6 +137,24 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-o", "--output", help="write the items that pass to this JSONL")
     p.add_argument("--report", help="write all items annotated with QC results to this JSONL")
     p.set_defaults(func=cmd_qc)
+
+    p = sub.add_parser("run", help="run the generation pipeline from a TOML config")
+    p.add_argument("config")
+    p.add_argument("--resume", action="store_true", help="continue an interrupted run with the same config")
+    p.set_defaults(func=cmd_run)
+
+    p = sub.add_parser("review", help="label pairs as a native speaker, to measure the judge and checks")
+    p.add_argument("items", help="JSONL of items, e.g. a run's dataset.jsonl")
+    p.add_argument("labels", help="JSONL file to append labels to")
+    p.add_argument("--n", type=int, default=50)
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--reviewer", default="anonymous")
+    p.set_defaults(func=cmd_review)
+
+    p = sub.add_parser("calibrate", help="compare human labels with the judge's verdicts and the automatic checks")
+    p.add_argument("labels")
+    p.add_argument("run_dir")
+    p.set_defaults(func=cmd_calibrate)
 
     p = sub.add_parser("export-lm-eval", help="write lm-evaluation-harness task YAMLs and data")
     p.add_argument("input")

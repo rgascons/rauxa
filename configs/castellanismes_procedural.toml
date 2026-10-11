@@ -1,0 +1,41 @@
+# Procedural generator only, no LLM. The automatic checks include a local LanguageTool server:
+#   java -cp languagetool-server.jar org.languagetool.server.HTTPServer --port 8081
+
+[run]
+name = "castellanismes_procedural"
+target_size = 20000
+seed = 1
+pool_multiplier = 1.2
+
+[[sources]]
+type = "procedural"
+task = "castellanismes_verbals"
+
+[sources.params]
+tenses = ["present", "imperfect", "future", "conditional", "periphrastic_past", "perfect"]
+formats = ["mcq", "judgement", "gec"]
+
+[checks]
+orthography = true
+marker = true
+minimal_pair = true
+
+[checks.languagetool]
+enabled = true
+url = "http://localhost:8081"
+require_bad_flagged = false
+
+[judge]
+enabled = false
+
+# hi_ha_que has no subject/person variation, so it has far fewer unique pairs than the
+# others (~5k with the current vocabulary); its minimum share reflects that.
+[min_share.phenomenon]
+tenir_que = 0.3
+hi_ha_que = 0.2
+donar_se_compte = 0.3
+
+[min_share.format]
+mcq = 0.3
+judgement = 0.3
+gec = 0.3

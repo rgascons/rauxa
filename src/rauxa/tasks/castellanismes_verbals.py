@@ -47,20 +47,50 @@ _PHENOMENON_TENSES: dict[str, tuple[Tense, ...]] = {
     "donar_se_compte": ("present", "future", "periphrastic_past", "perfect"),
 }
 
-# Phenomena whose negated form changes meaning ("no cal" ≠ "no s'ha de") are never negated.
-_NEGATABLE = frozenset({"tenir_que", "donar_se_compte"})
+# What the pipeline needs to know about each phenomenon: the error being tested, the
+# LanguageTool rules expected to flag it, a regex that must match the incorrect sentence
+# and no correct one, and known blind spots of LanguageTool.
+PHENOMENON_INFO: dict[str, dict[str, Any]] = {
+    "tenir_que": {
+        "error": "Obligació amb «tenir que» + infinitiu (calc del castellà «tener que»).",
+        "correction": "«haver de» + infinitiu.",
+        "languagetool_rules": ["TENIR_QUE"],
+        "marker": r"\b(tinc|tens|té|tenim|teniu|tenen|tenia|tenies|teníem|teníeu|tenien|tindr\w+|tingut|tenir) que\b",
+        "languagetool_gaps": [],
+    },
+    "hi_ha_que": {
+        "error": "Obligació impersonal amb «hi ha que» + infinitiu (calc del castellà «hay que»).",
+        "correction": "«cal» + infinitiu o «s'ha de» + infinitiu.",
+        "languagetool_rules": ["HI_HA_QUE"],
+        "marker": r"\bhi (ha|havia|haurà|hauria|va haver|ha hagut) que\b",
+        "languagetool_gaps": ["periphrastic_past", "perfect"],
+    },
+    "donar_se_compte": {
+        "error": "«donar-se compte» (calc del castellà «darse cuenta»).",
+        "correction": "«adonar-se».",
+        "languagetool_rules": ["DONAR_COMPTE"],
+        "marker": r"\b(don\w*|donar) compte\b",
+        "languagetool_gaps": [],
+    },
+}
+
+# Movement verbs: impersonal "s'ha d'anar" / "s'ha de dur" reads as a misused pronominal verb
+# ("anar-se'n", "endur-se"; LanguageTool flags it), so with these only "cal" is generated.
+_NO_IMPERSONAL_SE = frozenset(
+    {"anar", "tornar", "arribar", "venir", "sortir", "entrar", "pujar", "baixar", "dur", "portar"}
+)
 
 # ---------------------------------------------------------------------------------------
 # Lexicon
 # ---------------------------------------------------------------------------------------
 
 _ADVERBS: dict[Tense, tuple[str, ...]] = {
-    "present": ("avui", "ara", "aquesta setmana"),
-    "imperfect": ("abans", "cada matí", "aquell estiu"),
-    "future": ("demà", "la setmana que ve", "aviat"),
-    "conditional": ("potser", "segurament"),
-    "periphrastic_past": ("ahir", "la setmana passada", "aquell dia"),
-    "perfect": ("avui", "aquest matí", "aquesta setmana"),
+    "present": ("avui", "ara", "aquesta setmana", "aquests dies", "sovint"),
+    "imperfect": ("abans", "cada matí", "aquell estiu", "cada dilluns", "en aquella època"),
+    "future": ("demà", "la setmana que ve", "aviat", "dilluns", "l'any que ve", "d'aquí a una setmana"),
+    "conditional": ("potser", "segurament", "en aquest cas"),
+    "periphrastic_past": ("ahir", "la setmana passada", "aquell dia", "dijous passat", "l'any passat"),
+    "perfect": ("avui", "aquest matí", "aquesta setmana", "enguany", "aquesta tarda"),
 }
 
 _SUBJECT_PRONOUNS: dict[Person, tuple[str, ...]] = {
@@ -73,8 +103,11 @@ _SUBJECT_PRONOUNS: dict[Person, tuple[str, ...]] = {
 # Third persons always get an explicit subject. Personal articles (en/l') follow the
 # central variety, which the IEC norm accepts.
 _SUBJECT_NPS: dict[Person, tuple[str, ...]] = {
-    "3sg": ("la Marta", "en Pau", "l'Anna", "l'Oriol", "el meu germà", "la directora", "ella", "ell"),
-    "3pl": ("els veïns", "les meves cosines", "els alumnes", "ells", "elles"),
+    "3sg": (
+        "la Marta", "en Pau", "l'Anna", "l'Oriol", "la Laia", "en Jordi", "l'Ernest", "la Núria",
+        "el meu germà", "la meva veïna", "la directora", "el professor", "ella", "ell",
+    ),
+    "3pl": ("els veïns", "les meves cosines", "els alumnes", "els meus pares", "les infermeres", "ells", "elles"),
 }
 
 # (infinitive, complement). Mix of vowel- and consonant-initial infinitives to exercise
@@ -116,6 +149,58 @@ _INFINITIVE_PHRASES: tuple[tuple[str, str], ...] = (
     ("canviar", "les rodes del cotxe"),
     ("revisar", "els comptes"),
     ("vendre", "el pis"),
+    ("anar", "a la farmàcia"),
+    ("anar", "a buscar els nens a l'escola"),
+    ("acabar", "els deures abans de sopar"),
+    ("avisar", "els veïns del soroll"),
+    ("assistir", "a la reunió del consell"),
+    ("atendre", "els clients"),
+    ("actualitzar", "el programari"),
+    ("imprimir", "les entrades"),
+    ("emplenar", "la sol·licitud"),
+    ("escombrar", "el pati"),
+    ("endreçar", "el despatx"),
+    ("instal·lar", "la nova versió"),
+    ("informar", "la directora del canvi"),
+    ("organitzar", "el sopar de Nadal"),
+    ("omplir", "el dipòsit de gasolina"),
+    ("aprofitar", "el bon temps"),
+    ("estendre", "la roba al terrat"),
+    ("enllestir", "el projecte"),
+    ("estudiar", "el temari sencer"),
+    ("buscar", "una altra feina"),
+    ("signar", "el contracte"),
+    ("reservar", "una taula per a quatre persones"),
+    ("dur", "el cotxe al taller"),
+    ("rentar", "els plats"),
+    ("regar", "les plantes"),
+    ("cuidar", "la meva àvia"),
+    ("demanar", "hora al metge"),
+    ("trobar", "una solució"),
+    ("treure", "la brossa"),
+    ("engegar", "la rentadora"),  # not "posar la rentadora", itself a calque (cast. "poner")
+    ("fer", "els exercicis de matemàtiques"),
+    ("vigilar", "els nens"),
+    ("passar", "l'aspiradora"),
+    ("treballar", "fins tard"),
+    ("pujar", "les escales a peu"),
+    ("sortir", "abans de les sis"),
+    ("venir", "a la festa"),
+    ("dir", "la veritat"),
+    ("guanyar", "el partit"),
+    ("presentar", "l'informe al consell"),
+    ("convèncer", "el client"),
+    ("triar", "un regal per a la Laia"),
+    ("tancar", "la porta amb clau"),
+    ("comprovar", "les dades"),
+    ("traduir", "el document al francès"),
+    ("contestar", "el correu de la directora"),
+    ("dormir", "vuit hores"),
+    ("menjar", "més verdura"),
+    ("beure", "més aigua"),
+    ("caminar", "una hora"),
+    ("canviar", "la contrasenya"),
+    ("netejar", "els vidres"),
 )
 
 # Complements of adonar-se: "que" clauses by time frame, or "de" + NP.
@@ -202,10 +287,13 @@ def _realise_hi_ha_que(rng: Random, cfg: "CastellanismesVerbalsConfig", tense: T
     inf, compl = rng.choice(_INFINITIVE_PHRASES)
 
     cal = sentence(prefix + _caler_chain(tense) + [inf, compl])
-    s_ha_de = sentence(prefix + _with_reflexive("3sg", _finite_chain("haver", tense, "3sg")) + [elide_de(inf), compl])
     bad = sentence(prefix + ["hi"] + _finite_chain("haver", tense, "3sg") + ["que", inf, compl])
+    details = {"person": None, "negated": False, "infinitive": inf}
+    if inf in _NO_IMPERSONAL_SE:
+        return _Realisation(cal, bad, (cal,), details)
+    s_ha_de = sentence(prefix + _with_reflexive("3sg", _finite_chain("haver", tense, "3sg")) + [elide_de(inf), compl])
     good, alternative = (cal, s_ha_de) if rng.random() < 0.5 else (s_ha_de, cal)
-    return _Realisation(good, bad, (good, alternative), {"person": None, "negated": False, "infinitive": inf})
+    return _Realisation(good, bad, (good, alternative), details)
 
 
 def _realise_donar_se_compte(rng: Random, cfg: "CastellanismesVerbalsConfig", tense: Tense) -> _Realisation:
@@ -313,6 +401,7 @@ class CastellanismesVerbalsDataset(ProceduralDataset):
                 "sentence_good": realisation.good,
                 "sentence_bad": realisation.bad,
                 "correct_variants": list(realisation.variants),
+                "languagetool_rules": PHENOMENON_INFO[phenomenon]["languagetool_rules"],
                 **realisation.details,
                 **extra,
                 "difficulty": {"tenses": list(cfg.tenses), "negation_prob": cfg.negation_prob},

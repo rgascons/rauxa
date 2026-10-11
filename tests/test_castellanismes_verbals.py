@@ -6,26 +6,12 @@ from pathlib import Path
 import rauxa
 from rauxa.export import export_lm_eval
 from rauxa.formats import score
-from rauxa.tasks.castellanismes_verbals import PHENOMENA, TENSES
+from rauxa.catalan.checks import orthography_issues
+from rauxa.tasks.castellanismes_verbals import PHENOMENA, PHENOMENON_INFO, TENSES
 
 NAME = "castellanismes_verbals"
 
-# Orthographic errors templating could introduce: unelided "de"/article, missing contraction,
-# double spaces, space after an apostrophe.
-_FORBIDDEN = [
-    re.compile(r"\bde h?[aeiouàèéíòóú]", re.IGNORECASE),
-    re.compile(r"\b(de|a|per) (el|els)\b", re.IGNORECASE),
-    re.compile(r"\b(el|la) h?[aeoàèéòó]", re.IGNORECASE),
-    re.compile(r"\b(em|et|es) h?[aeiouàèéíòóú]", re.IGNORECASE),
-    re.compile(r"  "),
-    re.compile(r"' "),
-]
-
-_CALQUE_MARKERS = {
-    "tenir_que": re.compile(r"\b(tinc|tens|té|tenim|teniu|tenen|tenia|tenies|teníem|teníeu|tenien|tindr\w+|tingut|tenir) que\b", re.IGNORECASE),
-    "hi_ha_que": re.compile(r"\bhi (ha|havia|haurà|hauria|va haver|ha hagut) que\b", re.IGNORECASE),
-    "donar_se_compte": re.compile(r"\b(don\w*|donar) compte\b", re.IGNORECASE),
-}
+_CALQUE_MARKERS = {p: re.compile(info["marker"], re.IGNORECASE) for p, info in PHENOMENON_INFO.items()}
 
 
 class TestDataset(unittest.TestCase):
@@ -66,9 +52,7 @@ class TestDataset(unittest.TestCase):
         for entry in self.entries:
             meta = entry["metadata"]
             for text in [meta["sentence_bad"], *meta["correct_variants"]]:
-                self.assertTrue(text[0].isupper() and text.endswith("."), text)
-                for pattern in _FORBIDDEN:
-                    self.assertIsNone(pattern.search(text), f"{pattern.pattern!r} in {text!r}")
+                self.assertEqual(orthography_issues(text), [], text)
 
     def test_calque_only_in_bad_sentence(self):
         for entry in self.entries:

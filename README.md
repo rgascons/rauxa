@@ -1,12 +1,19 @@
 # rauxa
 
-Procedural generator of verifiable Catalan language tasks, built to produce benchmarks (and
-training data) that target **normative Catalan**: Spanish calques, elision and contraction,
-weak pronouns, diacritics... Items are built from templates and rules, never by asking an LLM
-for the right answer, so the gold answer is correct by construction.
+Generator of verifiable Catalan language tasks, built to produce benchmarks (and training
+data) that target **normative Catalan**: Spanish calques, elision and contraction, weak
+pronouns, diacritics...
 
-The interface copies [reasoning-gym](https://github.com/open-thought/reasoning-gym), so tasks can
-later be plugged into it through an adapter.
+Two layers:
+
+1. **Procedural generator** with a reasoning-gym compatible interface. Items are built from
+   templates and rules, so the gold answer is correct by construction. No LLM involved.
+2. **Pipeline**: makes candidate pairs (from the procedural generator and, optionally, an LLM
+   *writer*), runs automatic checks and an optional LLM *judge*, and selects a dataset that
+   meets minimum shares per phenomenon and format. LLMs only suggest pairs or give opinions;
+   the code decides what is kept.
+
+## Procedural generator
 
 ```python
 import rauxa
@@ -19,8 +26,6 @@ entry["metadata"]   # phenomenon, tense, sentence_good / sentence_bad, accepted 
 data.score_answer("A", entry)  # 0.0 or 1.0
 ```
 
-## How it maps to reasoning-gym
-
 | reasoning-gym | rauxa |
 |---|---|
 | Config dataclass with `validate()`, `seed`, `size` | Same (`CastellanismesVerbalsConfig`, ...) |
@@ -31,14 +36,107 @@ data.score_answer("A", entry)  # 0.0 or 1.0
 | `register_dataset` / `create_dataset` / `get_score_answer_fn` | Same names |
 | `BaseCurriculum` | Simplified version with scalar attribute levels |
 
-What is specific to rauxa:
+Each pair renders in one of three formats: `mcq` (pick the correct sentence), `judgement`
+(is it correct? sí/no) and `gec` (correct it). Every item also exports as a BLiMP-style
+minimal pair for log-likelihood scoring.
 
-- **Error transformations**: each task builds the incorrect sentence from the same choices as the
-  correct one, applying the error real models make.
-- **One pair, several formats**: `mcq` (pick the correct sentence), `judgement` (is it correct?
-  sí/no) and `gec` (correct it). Every dataset also exports as BLiMP-style minimal pairs.
-- **LanguageTool QC**: the correct sentence must get no LanguageTool match; the incorrect one
-  should get at least one.
+## Pipeline
+
+```mermaid
+flowchart TD
+    cfg[/"Read the run config (TOML)"/]
+    cfg --> info["For each phenomenon, load the error,<br/>its correction and the LanguageTool rule<br/>that should catch it"]
+    info --> make
+
+    subgraph round["Repeated in rounds"]
+        make["Make new sentence pairs from templates,<br/>and optionally ask an LLM for more.<br/>Skip pairs we already have."]
+        make --> checks{"Does the pair pass the automatic checks?<br/>spelling, error present, one small change,<br/>LanguageTool"}
+        checks -- "no, and an LLM wrote it" --> fix["Ask the LLM to fix it<br/>(limited number of tries)"]
+        fix --> checks
+        checks -- no --> rej[("rejected.jsonl")]
+        checks -- yes --> judge{"Does a second LLM<br/>think it's a good item?<br/>(optional)"}
+        judge -- no --> rej
+        judge -- "yes, or no judge used" --> keep["Keep the pair"]
+    end
+
+    keep --> enough{"Enough pairs,<br/>with the required mix?"}
+    enough -- "not yet" --> make
+    enough -- "yes, or nothing new left to make" --> pick["Pick the dataset,<br/>filling the required mix first"]
+    pick --> complete[("dataset.jsonl<br/>full size, mix met")]
+    pick --> incomplete[("dataset.incomplete.jsonl<br/>too small, or mix not met")]
+```
+
+### Automatic checks
+
+| Check | Passes when |
+|---|---|
+| `schema` | Required fields present; the correct sentence is among the accepted variants |
+| `orthography` | No unelided *de*/article/pronoun, no missing contraction, capitalised, final punctuation |
+| `marker` | The phenomenon's regex matches the incorrect sentence and no correct variant |
+| `minimal_pair` | The two sentences differ by one contiguous edit of at most `max_edit_tokens` tokens |
+| `languagetool` | Every correct variant gets no LanguageTool match. If the incorrect sentence is not flagged, that is recorded as a case LanguageTool misses; it only rejects with `require_bad_flagged` |
+
+### Run directory
+
+| File | Meaning |
+|---|---|
+| `dataset.jsonl` | The dataset: target size reached and every minimum share met |
+| `dataset.incomplete.jsonl` | Written instead when there are too few pairs or a minimum share is not met |
+| `candidates.jsonl` | Every pair made, before any check. Don't use it as a dataset |
+| `checks.jsonl`, `judge.jsonl` | Per-pair check results and judge verdicts (append-only, used to resume) |
+| `rejected.jsonl` | Pairs that were dropped, with the reason |
+| `manifest.json` | Config and fingerprint, counts, check failures, LanguageTool flag rate and misses per phenomenon, judge stats, shares, warnings |
+| `state.json` | Resume state. `rauxa run CONFIG --resume` continues an interrupted run; a changed config is refused |
+
+Every kept pair carries `metadata.qc` with how it was kept (`judge: not_used | passed | audited |
+not_sampled | error`, `kept_despite_judge_error`), its check results and LanguageTool details.
+
+### Safeguards
+
+- **Judge errors are handled explicitly**: `on_error = "reject" | "keep"`, recorded on each pair
+  and counted in the manifest.
+- **Same-family bias**: the manifest warns when the judge is from the same model family as the
+  LLM writer, or either is from the same family as a model in `evaluated_models`.
+- **Checking the judge**: `rauxa review` collects native-speaker labels; `rauxa calibrate`
+  reports judge–human agreement and Cohen's kappa, and how many pairs that passed the automatic
+  checks a human would still reject.
+- **Running out of pairs**: a procedural source that stops producing new unique pairs is marked
+  exhausted and reported, instead of silently repeating pairs.
+
+### LLM backends
+
+The writer and the judge use any OpenAI-compatible chat endpoint (OpenAI, vLLM, Ollama,
+llama.cpp server...). Keys are read from the environment variable named by `api_key_env`; local
+servers need none. See [configs/castellanismes_full.toml](configs/castellanismes_full.toml).
+
+## Setup
+
+No Python dependencies. LanguageTool needs Java 17+:
+
+```bash
+# download LanguageTool-stable.zip from https://languagetool.org/download/ and unpack it, then:
+java -cp languagetool-server.jar org.languagetool.server.HTTPServer --port 8081
+```
+
+## Command line
+
+```bash
+export PYTHONPATH=src
+python3 -m rauxa list
+python3 -m rauxa run configs/castellanismes_procedural.toml           # pipeline, no LLM
+python3 -m rauxa run configs/castellanismes_full.toml                 # + LLM writer and judge
+python3 -m rauxa generate castellanismes_verbals --size 1000 -o out/raw.jsonl   # generator only
+python3 -m rauxa review out/runs/castellanismes_procedural/dataset.jsonl out/labels.jsonl --n 100 --reviewer ricard
+python3 -m rauxa calibrate out/labels.jsonl out/runs/castellanismes_procedural
+python3 -m rauxa export-lm-eval out/runs/castellanismes_procedural/dataset.jsonl out/lm_eval --name rauxa_cv
+python3 scripts/preview_pairs.py castellanismes_verbals 30
+```
+
+Run the benchmark with lm-evaluation-harness:
+
+```bash
+lm_eval --model hf --model_args pretrained=BSC-LT/salamandra-7b --include_path out/lm_eval --tasks rauxa_cv_pairs,rauxa_cv_mcq
+```
 
 ## Tasks
 
@@ -48,41 +146,8 @@ What is specific to rauxa:
 
 Only the IEC (central) norm is implemented; `norm="avl"` raises `NotImplementedError`.
 
-## Command line
-
-No dependencies are needed to run from a checkout:
-
-```bash
-export PYTHONPATH=src
-python3 -m rauxa list
-python3 -m rauxa generate castellanismes_verbals --size 50000 --seed 1 --formats mcq,judgement,gec -o out/cv.jsonl
-python3 -m rauxa qc out/cv.jsonl --lt-url http://localhost:8081 -o out/cv.clean.jsonl --report out/cv.qc.jsonl
-python3 -m rauxa export-lm-eval out/cv.clean.jsonl out/lm_eval --name rauxa_cv
-python3 scripts/preview_pairs.py castellanismes_verbals 30   # table for human review
-```
-
-Then run the benchmark with lm-evaluation-harness:
-
-```bash
-lm_eval --model hf --model_args pretrained=BSC-LT/salamandra-7b --include_path out/lm_eval --tasks rauxa_cv_pairs,rauxa_cv_mcq
-```
-
 ## Tests
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests
-```
-
-## Layout
-
-```
-src/rauxa/
-  dataset.py, factory.py, curriculum.py   reasoning-gym style core
-  formats.py                              prompt formats and verifiers
-  catalan/orthography.py                  elision, articles, contractions, clitics
-  catalan/conjugation.py                  small verb paradigms
-  tasks/castellanismes_verbals.py         first task
-  qc/languagetool.py                      LanguageTool HTTP client
-  export.py                               JSONL and lm-eval export
-  cli.py
 ```
