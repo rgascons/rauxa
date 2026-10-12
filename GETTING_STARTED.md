@@ -47,7 +47,7 @@ curl -L -o LanguageTool-stable.zip https://languagetool.org/download/LanguageToo
 python3 -m zipfile -e LanguageTool-stable.zip .
 ```
 
-(`python3 -m zipfile` is used because `unzip` isn't installed everywhere.) Then start the
+Then start the
 server in a separate terminal and leave it open:
 
 ```bash
