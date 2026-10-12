@@ -1,9 +1,10 @@
 """LLM backends. Both return a parsed JSON object from ``chat_json``.
 
 - ``OpenAICompatibleBackend``: OpenAI-compatible chat completions (OpenAI, vLLM, Ollama...).
+- ``AnthropicBackend``: Claude through Anthropic's SDK (the only optional dependency).
 - ``AgentFileBackend``: requests written to files and answered by a coding agent.
 
-Standard library only.
+Standard library only, except ``AnthropicBackend``, which imports the SDK when used.
 """
 
 from __future__ import annotations
@@ -58,11 +59,9 @@ class OpenAICompatibleBackend:
             return json.load(response)
 
     def chat_json(self, messages: list[dict[str, str]]) -> dict[str, Any]:
-        payload: dict[str, Any] = {
-            "model": self.config.model,
-            "messages": messages,
-            "temperature": self.config.temperature,
-        }
+        payload: dict[str, Any] = {"model": self.config.model, "messages": messages}
+        if self.config.temperature is not None:
+            payload["temperature"] = self.config.temperature
         if self.config.json_mode:
             payload["response_format"] = {"type": "json_object"}
         last_error: Exception | None = None
@@ -74,6 +73,72 @@ class OpenAICompatibleBackend:
                 last_error = e
                 time.sleep(min(2**attempt, 10))
         raise LLMError(f"{self.model}: failed after {self.config.max_retries} attempts: {last_error}")
+
+
+# Models that accept the server-side refusal fallback ("fallbacks": "default").
+_FALLBACK_MODELS = frozenset({"claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5"})
+
+
+class AnthropicBackend:
+    """Claude through Anthropic's Python SDK, an optional dependency (``pip install -e ".[anthropic]"``).
+
+    No sampling parameters are sent: current Claude models reject them. Depth of reasoning is
+    set with ``effort`` instead. JSON comes from the prompt, and the reply text is parsed with
+    the same tolerant parser as the other backends.
+    """
+
+    def __init__(self, config: BackendConfig):
+        try:
+            import anthropic
+        except ImportError as e:
+            raise LLMError(
+                "backend type 'anthropic' needs Anthropic's SDK: pip install -e \".[anthropic]\""
+            ) from e
+        self._anthropic = anthropic
+        self.config = config
+        self.model = config.model
+        kwargs: dict[str, Any] = {"max_retries": config.max_retries, "timeout": config.timeout}
+        if config.api_key_env:
+            key = os.environ.get(config.api_key_env, "")
+            if not key:
+                raise LLMError(f"environment variable {config.api_key_env} is not set")
+            kwargs["api_key"] = key
+        if config.base_url:
+            kwargs["base_url"] = config.base_url
+        self.client = anthropic.Anthropic(**kwargs)
+
+    def chat_json(self, messages: list[dict[str, str]]) -> dict[str, Any]:
+        anthropic = self._anthropic
+        params: dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": 16000,
+            "messages": [m for m in messages if m["role"] != "system"],
+        }
+        system = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
+        if system:
+            params["system"] = system
+        if self.config.effort:
+            params["output_config"] = {"effort": self.config.effort}
+        try:
+            if self.config.fallbacks and self.model in _FALLBACK_MODELS:
+                response = self.client.beta.messages.create(
+                    **params, betas=["server-side-fallback-2026-07-01"], extra_body={"fallbacks": "default"}
+                )
+            else:
+                response = self.client.messages.create(**params)
+        except anthropic.RateLimitError as e:
+            raise LLMError(f"{self.model}: rate limited after retries: {e}") from e
+        except anthropic.APIStatusError as e:
+            raise LLMError(f"{self.model}: API error {e.status_code}: {e}") from e
+        except anthropic.APIConnectionError as e:
+            raise LLMError(f"{self.model}: connection error: {e}") from e
+        if response.stop_reason == "refusal":
+            category = getattr(response.stop_details, "category", None)
+            raise LLMError(f"{self.model} declined the request (category: {category})")
+        if response.stop_reason == "max_tokens":
+            raise LLMError(f"{self.model}: reply cut off at max_tokens")
+        text = "".join(block.text for block in response.content if block.type == "text")
+        return parse_json_object(text)
 
 
 _REQUEST_TEMPLATE = """\

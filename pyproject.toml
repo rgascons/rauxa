@@ -13,6 +13,7 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+anthropic = ["anthropic"]
 
 [project.scripts]
 rauxa = "rauxa.cli:main"

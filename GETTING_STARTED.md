@@ -129,15 +129,29 @@ For a quick experiment, set `name = "test"` and `target_size = 500`.
 ## 7. Add LLMs (optional)
 
 An LLM writer adds more varied sentences than the templates, and an LLM judge reviews them.
-There are two ways to use them:
+There are three ways to use them:
 
 - **An API or a local model server.** Use
   [configs/castellanismes_full.toml](configs/castellanismes_full.toml) and set `base_url` and
   `model` under `[backends.writer]` and `[backends.judge]`. For a hosted API, export the key
   named by `api_key_env` (e.g. `export OPENAI_API_KEY=...`). Local servers such as Ollama
   (`base_url = "http://localhost:11434/v1"`) or vLLM need no key. Then run it as in step 3.
+- **Claude.** Install Anthropic's SDK and set your key, then run
+  [configs/castellanismes_claude.toml](configs/castellanismes_claude.toml), which uses
+  Claude Sonnet 5.5 as the writer and Claude Opus 5.5 as the judge (about $2–4 per run):
+
+  ```bash
+  pip install -e ".[anthropic]"
+  export ANTHROPIC_API_KEY=your-key
+  rauxa run configs/castellanismes_claude.toml
+  ```
+
 - **A coding agent instead of an API** (Claude Code, Codex...), at no API cost. Open the repo
   in your agent and ask it to follow [AGENT_PIPELINE.md](AGENT_PIPELINE.md).
+
+Judging only LLM-written pairs (`source_types = ["llm"]` under `[judge]`) keeps the cost low:
+template pairs are correct by construction. Use models from different families for the writer
+and the judge when you can; a model judging its own sentences tends to approve them.
 
 ## 8. Use the dataset
 

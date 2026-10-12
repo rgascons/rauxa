@@ -15,16 +15,25 @@ class BackendConfig:
     """Where LLM calls go.
 
     - ``openai``: an OpenAI-compatible chat completions endpoint (OpenAI, vLLM, Ollama...).
+    - ``anthropic``: Claude through Anthropic's Python SDK (``pip install -e ".[anthropic]"``).
     - ``agent``: files answered by a coding agent (Claude Code, Codex...). The run stops
       with status "waiting" and resumes once the requests are answered. See AGENT_PIPELINE.md.
     """
 
-    type: Literal["openai", "agent"] = "openai"
-    base_url: str = ""
+    type: Literal["openai", "anthropic", "agent"] = "openai"
+    base_url: str = ""  # optional for "anthropic" (defaults to Anthropic's API)
     model: str = ""  # for "agent", the model the agent runs on (recorded, used for family warnings)
-    api_key_env: Optional[str] = None  # name of the env var holding the key; None for local servers
-    temperature: float = 0.7
-    json_mode: bool = True  # send response_format={"type": "json_object"}
+    # Env var holding the key. None: no key for "openai" (local servers); for "anthropic", the
+    # SDK's own lookup (ANTHROPIC_API_KEY, or an `ant auth login` profile).
+    api_key_env: Optional[str] = None
+    # Sampling temperature ("openai" only). Leave unset for models that reject it, such as
+    # reasoning models; current Claude models don't take it, so "anthropic" never sends it.
+    temperature: Optional[float] = None
+    json_mode: bool = True  # "openai": send response_format={"type": "json_object"}
+    # "anthropic": reasoning effort (low, medium, high, xhigh, max); unset uses the model default.
+    effort: Optional[str] = None
+    # "anthropic": if the model declines a request, let the API retry it on another model.
+    fallbacks: bool = True
     timeout: float = 120.0
     max_retries: int = 3
 
@@ -114,6 +123,12 @@ class RunConfig:
             backend = self.backends[name]
             if backend.type == "openai":
                 assert backend.base_url and backend.model, f"backend '{name}' needs base_url and model"
+            if backend.type == "anthropic":
+                assert backend.model, f"backend '{name}' needs a model, e.g. claude-opus-5-5"
+            if backend.effort is not None:
+                assert backend.effort in ("low", "medium", "high", "xhigh", "max"), (
+                    f"backend '{name}': effort must be low, medium, high, xhigh or max"
+                )
         for dim, shares in self.min_share.items():
             assert sum(shares.values()) <= 1.0 + 1e-9, f"min_share for '{dim}' sums to more than 1"
 

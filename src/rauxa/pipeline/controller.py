@@ -42,7 +42,15 @@ from ..qc.languagetool import LanguageToolClient
 from .agents import Judge, Writer, WrittenPair, failed_questions, llm_entry
 from .checks import build_checks, run_checks
 from .config import RunConfig, SourceConfig
-from .llm import AgentFileBackend, AwaitingAgent, ChatBackend, LLMError, OpenAICompatibleBackend, model_family
+from .llm import (
+    AgentFileBackend,
+    AnthropicBackend,
+    AwaitingAgent,
+    ChatBackend,
+    LLMError,
+    OpenAICompatibleBackend,
+    model_family,
+)
 from .selection import item_id, select, share_report
 
 _HUGE = 2**31 - 1
@@ -168,6 +176,8 @@ class Pipeline:
             config = self.cfg.backends[name]
             if config.type == "agent":
                 backends[name] = AgentFileBackend(config, self.dir / "agent_exchange")
+            elif config.type == "anthropic":
+                backends[name] = AnthropicBackend(config)
             else:
                 backends[name] = OpenAICompatibleBackend(config)
         return backends

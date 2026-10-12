@@ -118,9 +118,13 @@ not_sampled | error`, `kept_despite_judge_error`), its check results and Languag
 
 ### LLM backends
 
-The writer and the judge use any OpenAI-compatible chat endpoint (OpenAI, vLLM, Ollama,
-llama.cpp server...). Keys are read from the environment variable named by `api_key_env`; local
-servers need none. See [configs/castellanismes_full.toml](configs/castellanismes_full.toml).
+The writer and the judge each use one of these backend types:
+
+| `type` | For | Notes |
+|---|---|---|
+| `openai` (default) | Any OpenAI-compatible chat endpoint: OpenAI, DeepSeek, Gemini, GLM, vLLM, Ollama, llama.cpp server... | Key from the env var named by `api_key_env`; local servers need none. Leave `temperature` unset for models that reject it. See [configs/castellanismes_full.toml](configs/castellanismes_full.toml) |
+| `anthropic` | Claude, through Anthropic's SDK: `pip install -e ".[anthropic]"` | Key from `ANTHROPIC_API_KEY` (or `api_key_env`). Reasoning depth via `effort`; refusals are retried on another model unless `fallbacks = false`. See [configs/castellanismes_claude.toml](configs/castellanismes_claude.toml) |
+| `agent` | A coding agent answering request files, no API | See below |
 
 ### Without an API: a coding agent plays the LLM roles
 

@@ -1,0 +1,58 @@
+# Procedural pairs plus pairs written by Claude Sonnet 5.5, with Claude Opus 5.5 judging the
+# LLM-written ones. Needs Anthropic's SDK and an API key:
+#   pip install -e ".[anthropic]"
+#   export ANTHROPIC_API_KEY=...
+#
+# Cost: about $2-4 at the sizes below (the judge is most of it). Writer and judge are the
+# same model family, so the manifest will warn about self-preference; for a stricter setup,
+# use a writer from another provider (see castellanismes_full.toml) and keep Claude as judge.
+
+[run]
+name = "castellanismes_claude"
+target_size = 2000
+seed = 1
+pool_multiplier = 1.2
+evaluated_models = []
+
+[[sources]]
+type = "procedural"
+task = "castellanismes_verbals"
+
+[sources.params]
+tenses = ["present", "imperfect", "future", "conditional", "periphrastic_past", "perfect"]
+formats = ["mcq", "judgement", "gec"]
+
+[[sources]]
+type = "llm"
+task = "castellanismes_verbals"
+backend = "writer"
+count = 200
+batch_size = 20
+max_fix_attempts = 2
+
+[checks.languagetool]
+enabled = true
+url = "http://localhost:8081"
+
+[judge]
+enabled = true
+backend = "judge"
+mode = "filter"
+source_types = ["llm"]   # template pairs are correct by construction
+on_error = "reject"
+workers = 4
+
+[backends.writer]
+type = "anthropic"
+model = "claude-sonnet-5-5"
+effort = "low"           # short, simple outputs; keeps cost down
+
+[backends.judge]
+type = "anthropic"
+model = "claude-opus-5-5"
+effort = "medium"        # Opus 5.5's default; raise to "high" for a stricter, costlier judge
+
+[min_share.phenomenon]
+tenir_que = 0.25
+hi_ha_que = 0.2
+donar_se_compte = 0.25
