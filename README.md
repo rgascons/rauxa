@@ -55,6 +55,9 @@ minimal pair for log-likelihood scoring.
 
 ## Pipeline
 
+A run is described by one TOML file; [CONFIG.md](CONFIG.md) documents every key, the source
+types, the judge modes and how they interact.
+
 ```mermaid
 flowchart TD
     cfg[/"Read the run config (TOML)"/]

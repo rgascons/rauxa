@@ -126,6 +126,8 @@ Copy a config and edit the copy. The settings you are most likely to change:
 
 For a quick experiment, set `name = "test"` and `target_size = 500`.
 
+Every key, with defaults and how they interact, is in [CONFIG.md](CONFIG.md).
+
 ## 7. Add LLMs (optional)
 
 An LLM writer adds more varied sentences than the templates, and an LLM judge reviews them.
