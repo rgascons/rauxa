@@ -204,6 +204,18 @@ class TestLLMRoles(unittest.TestCase):
 class TestAgentBackend(unittest.TestCase):
     """The run stops with status "waiting"; an agent answers the request files; --resume continues."""
 
+    def test_one_request_per_writer_batch(self):
+        # Several batches for the same phenomenon must not collapse into one request.
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = config(
+                tmp, target_size=50, min_share={}, checks=ChecksConfig(languagetool=LanguageToolCheckConfig(enabled=False)),
+                sources=[SourceConfig(type="llm", task=TASK, backend="writer", count=12, batch_size=3, phenomena=["tenir_que"])],
+                backends={"writer": BackendConfig(type="agent", model="claude-sonnet-5-5")},
+            )
+            result = Pipeline(cfg, log=lambda _: None).run()
+            self.assertEqual(result.status, "waiting")
+            self.assertEqual(len(result.manifest["pending_requests"]), 4)
+
     def test_agent_round_trip(self):
         with tempfile.TemporaryDirectory() as tmp:
             cfg = config(

@@ -215,12 +215,18 @@ class Pipeline:
                 tries = 0
         return out
 
-    def _examples(self, task: str, phenomenon: str, k: int = 4) -> list[tuple[str, str]]:
+    def _examples(self, task: str, phenomenon: str, batch_index: int, k: int = 4) -> list[tuple[str, str]]:
+        """Example pairs for a writer prompt, different for each batch.
+
+        Different examples keep prompts for the same phenomenon distinct: otherwise an agent
+        backend, which identifies requests by their content, would reuse the first answer.
+        """
         try:
             data = create_dataset(task, seed=self.cfg.seed, size=_HUGE, phenomena=(phenomenon,))
         except (AssertionError, TypeError, ValueError):
             return []
-        return [(data[j]["metadata"]["sentence_good"], data[j]["metadata"]["sentence_bad"]) for j in range(k)]
+        start = batch_index * k
+        return [(data[j]["metadata"]["sentence_good"], data[j]["metadata"]["sentence_bad"]) for j in range(start, start + k)]
 
     def _llm_entry(self, i: int, src: SourceConfig, phenomenon: str, pair: WrittenPair, revision_of: Optional[str] = None):
         info = self.info[src.task][phenomenon]
@@ -243,7 +249,8 @@ class Pipeline:
             phenomenon = phenomena[batch_index % len(phenomena)]
             k = min(src.batch_size, n)
             try:
-                pairs = self.writers[i].write(self.info[src.task][phenomenon], self._examples(src.task, phenomenon), k)
+                examples = self._examples(src.task, phenomenon, batch_index)
+                pairs = self.writers[i].write(self.info[src.task][phenomenon], examples, k)
                 consecutive_errors = 0
             except AwaitingAgent:
                 waiting_offset += k
