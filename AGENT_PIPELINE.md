@@ -27,8 +27,11 @@ finishes. Work through these steps in order.
 
 ### 1. Set up
 
-- Work from the repository root. Python 3.11 or newer is required; no packages need installing.
-- Use `PYTHONPATH=src` for every command below.
+- Work from the repository root. Python 3.11 or newer is required.
+- The commands below use `rauxa`. Your shell may not keep an activated environment between
+  commands, so call it by path: if `.venv/bin/rauxa` exists, use `.venv/bin/rauxa`. If there
+  is no `.venv`, either create it (`python3 -m venv .venv && .venv/bin/pip install -e .`) or,
+  if that fails, use `PYTHONPATH=src python3 -m rauxa` instead.
 - LanguageTool: check whether a server answers at `http://localhost:8081/v2/languages`. If
   not, and Java 17+ and a LanguageTool download are available, start it:
   `java -cp languagetool-server.jar org.languagetool.server.HTTPServer --port 8081`.
@@ -46,7 +49,7 @@ Do these before the first run: the run refuses to resume if the config changes a
 Start the run:
 
 ```bash
-PYTHONPATH=src python3 -m rauxa run configs/castellanismes_agent.toml
+rauxa run configs/castellanismes_agent.toml
 ```
 
 The exit code tells you what to do next:
@@ -61,7 +64,7 @@ The exit code tells you what to do next:
 To continue after answering:
 
 ```bash
-PYTHONPATH=src python3 -m rauxa run configs/castellanismes_agent.toml --resume
+rauxa run configs/castellanismes_agent.toml --resume
 ```
 
 A full run usually takes three to five rounds of waiting.

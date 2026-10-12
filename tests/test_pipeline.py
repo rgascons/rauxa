@@ -97,6 +97,22 @@ class TestProceduralRun(unittest.TestCase):
             for name in ("candidates.jsonl", "checks.jsonl", "rejected.jsonl", "manifest.json", "state.json"):
                 self.assertTrue((Path(tmp) / "run" / name).exists(), name)
 
+    def test_summary_command(self):
+        from contextlib import redirect_stderr, redirect_stdout
+        from io import StringIO
+
+        from rauxa.cli import main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            Pipeline(config(tmp), lt_client=FakeLanguageTool(), log=lambda _: None).run()
+            out, err = StringIO(), StringIO()
+            with redirect_stdout(out), redirect_stderr(err):
+                self.assertEqual(main(["summary", str(Path(tmp) / "run"), "--samples", "2"]), 0)
+                self.assertEqual(main(["summary", str(Path(tmp) / "missing")]), 1)
+            self.assertIn("Status:   complete", out.getvalue())
+            self.assertEqual(out.getvalue().count("  ✓ "), 2)
+            self.assertIn("no run found", err.getvalue())
+
     def test_existing_run_requires_resume(self):
         with tempfile.TemporaryDirectory() as tmp:
             cfg = config(tmp)

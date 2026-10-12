@@ -1,4 +1,5 @@
-"""Command-line interface: ``rauxa list | generate | run | qc | review | calibrate | export-lm-eval``."""
+"""Command-line interface:
+``rauxa list | generate | run | summary | qc | review | calibrate | export-lm-eval``."""
 
 from __future__ import annotations
 
@@ -7,6 +8,7 @@ import json
 import sys
 from collections import Counter
 from pathlib import Path
+from random import Random
 
 from . import DATASETS, create_dataset
 from .export import export_lm_eval, read_jsonl, write_jsonl
@@ -93,6 +95,49 @@ def cmd_run(args: argparse.Namespace) -> int:
     return {"complete": 0, "incomplete": 2, "waiting": 3}[result.status]
 
 
+def cmd_summary(args: argparse.Namespace) -> int:
+    run_dir = Path(args.run_dir)
+    manifest_path = run_dir / "manifest.json"
+    if not manifest_path.exists():
+        if (run_dir / "state.json").exists():
+            print(f"{run_dir}: the run hasn't finished (it was interrupted, or it is waiting for an "
+                  "agent). Continue it with: rauxa run CONFIG --resume", file=sys.stderr)
+        else:
+            print(f"{run_dir}: no run found here", file=sys.stderr)
+        return 1
+    m = json.loads(manifest_path.read_text(encoding="utf-8"))
+    c = m["counts"]
+    dataset = run_dir / ("dataset.jsonl" if m["status"] == "complete" else "dataset.incomplete.jsonl")
+    print(f"Status:   {m['status']}  ({m['started_at']} → {m['finished_at']})")
+    print(f"Dataset:  {dataset}  ({c['selected']} of {m['config']['target_size']} pairs)")
+    print(f"Pairs:    {c['candidates']} made, {c['kept']} kept, {c['rejected']} rejected, "
+          f"{c['duplicates_skipped']} duplicates skipped")
+    print(f"Sources:  " + ", ".join(f"{k} {v}" for k, v in c["by_source_type"].items()))
+    if m["check_failures"]:
+        print("Failed checks: " + ", ".join(f"{k} {v}" for k, v in m["check_failures"].items()))
+    if m["languagetool"]:
+        print("LanguageTool flagged the incorrect sentence in:")
+        for phenomenon, lt in m["languagetool"].items():
+            print(f"  {phenomenon:<18} {lt['flag_rate']:.1%} of {lt['checked']}")
+    for dim, rows in m["shares"]["fields"].items():
+        print(f"Share by {dim}: " + ", ".join(f"{v} {r['share']:.1%}" for v, r in rows.items()))
+    j = m["judge"]
+    if j["enabled"]:
+        print(f"Judge:    {j['judged']} judged, {j['passed']} passed, {j['errors']} errors ({j['model'] or 'model not set'})")
+    for warning in m["warnings"]:
+        print(f"Warning:  {warning}")
+    if args.samples and dataset.exists():
+        items = read_jsonl(dataset)
+        n = min(args.samples, len(items))
+        print(f"\n{n} random pair{'s' if n != 1 else ''}:")
+        for entry in Random(args.seed).sample(items, n):
+            meta = entry["metadata"]
+            print(f"\n  [{meta['phenomenon']}, {meta['format']}]")
+            print(f"  ✓ {meta['sentence_good']}")
+            print(f"  ✗ {meta['sentence_bad']}")
+    return 0
+
+
 def cmd_review(args: argparse.Namespace) -> int:
     from .pipeline.calibration import review
 
@@ -142,6 +187,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("config")
     p.add_argument("--resume", action="store_true", help="continue an interrupted run with the same config")
     p.set_defaults(func=cmd_run)
+
+    p = sub.add_parser("summary", help="show the results of a pipeline run, with sample pairs")
+    p.add_argument("run_dir", help="e.g. out/runs/castellanismes_procedural")
+    p.add_argument("--samples", type=int, default=5, help="random pairs to show (0 for none)")
+    p.add_argument("--seed", type=int, default=0)
+    p.set_defaults(func=cmd_summary)
 
     p = sub.add_parser("review", help="label pairs as a native speaker, to measure the judge and checks")
     p.add_argument("items", help="JSONL of items, e.g. a run's dataset.jsonl")

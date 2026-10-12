@@ -13,6 +13,19 @@ Two layers:
    meets minimum shares per phenomenon and format. LLMs only suggest pairs or give opinions;
    the code decides what is kept.
 
+## Getting started
+
+[GETTING_STARTED.md](GETTING_STARTED.md) walks you from a fresh clone to a finished dataset:
+setup, starting LanguageTool, running the pipeline, reading the results, changing the config,
+adding LLMs and using the dataset. The short version, with LanguageTool already running on
+port 8081 ([how to start it](GETTING_STARTED.md#2-start-languagetool)):
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate && pip install -e .
+rauxa run configs/castellanismes_procedural.toml
+rauxa summary out/runs/castellanismes_procedural
+```
+
 ## Procedural generator
 
 ```python
@@ -119,35 +132,23 @@ the same prompts as an API run. Open the repo in your agent and ask it to follow
 [AGENT_PIPELINE.md](AGENT_PIPELINE.md); the config is
 [configs/castellanismes_agent.toml](configs/castellanismes_agent.toml).
 
-## Setup
-
-No Python dependencies. LanguageTool needs Java 17+:
+## Command reference
 
 ```bash
-# download LanguageTool-stable.zip from https://languagetool.org/download/ and unpack it, then:
-java -cp languagetool-server.jar org.languagetool.server.HTTPServer --port 8081
+rauxa list                                                   # available tasks
+rauxa run configs/castellanismes_procedural.toml             # pipeline, no LLM
+rauxa run configs/castellanismes_full.toml                   # + LLM writer and judge
+rauxa run configs/castellanismes_agent.toml [--resume]       # LLM roles played by a coding agent
+rauxa summary out/runs/castellanismes_procedural             # results of a run
+rauxa generate castellanismes_verbals --size 1000 -o out/raw.jsonl   # generator only
+rauxa review out/runs/castellanismes_procedural/dataset.jsonl out/labels.jsonl --n 100 --reviewer your-name
+rauxa calibrate out/labels.jsonl out/runs/castellanismes_procedural
+rauxa export-lm-eval out/runs/castellanismes_procedural/dataset.jsonl out/lm_eval --name rauxa_cv
+python scripts/preview_pairs.py castellanismes_verbals 30    # template pairs, for a quick look
 ```
 
-## Command line
-
-```bash
-export PYTHONPATH=src
-python3 -m rauxa list
-python3 -m rauxa run configs/castellanismes_procedural.toml           # pipeline, no LLM
-python3 -m rauxa run configs/castellanismes_full.toml                 # + LLM writer and judge
-python3 -m rauxa run configs/castellanismes_agent.toml [--resume]     # LLM roles played by a coding agent
-python3 -m rauxa generate castellanismes_verbals --size 1000 -o out/raw.jsonl   # generator only
-python3 -m rauxa review out/runs/castellanismes_procedural/dataset.jsonl out/labels.jsonl --n 100 --reviewer ricard
-python3 -m rauxa calibrate out/labels.jsonl out/runs/castellanismes_procedural
-python3 -m rauxa export-lm-eval out/runs/castellanismes_procedural/dataset.jsonl out/lm_eval --name rauxa_cv
-python3 scripts/preview_pairs.py castellanismes_verbals 30
-```
-
-Run the benchmark with lm-evaluation-harness:
-
-```bash
-lm_eval --model hf --model_args pretrained=BSC-LT/salamandra-7b --include_path out/lm_eval --tasks rauxa_cv_pairs,rauxa_cv_mcq
-```
+Every command takes `--help`. Without installing, run `export PYTHONPATH=src` and use
+`python3 -m rauxa` in place of `rauxa`.
 
 ## Tasks
 
@@ -160,5 +161,5 @@ Only the IEC (central) norm is implemented; `norm="avl"` raises `NotImplementedE
 ## Tests
 
 ```bash
-PYTHONPATH=src python3 -m unittest discover -s tests
+python -m unittest discover -s tests
 ```
