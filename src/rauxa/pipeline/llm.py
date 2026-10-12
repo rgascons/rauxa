@@ -246,10 +246,18 @@ def parse_json_object(text: str) -> dict[str, Any]:
     try:
         value = json.loads(text)
     except json.JSONDecodeError:
-        start, end = text.find("{"), text.rfind("}")
-        if start < 0 or end <= start:
+        # Take the first complete object, ignoring prose or further objects around it.
+        decoder = json.JSONDecoder()
+        value = None
+        start = text.find("{")
+        while start >= 0:
+            try:
+                value, _ = decoder.raw_decode(text, start)
+                break
+            except json.JSONDecodeError:
+                start = text.find("{", start + 1)
+        if value is None:
             raise LLMError(f"no JSON object in response: {text[:200]!r}") from None
-        value = json.loads(text[start : end + 1])
     if not isinstance(value, dict):
         raise LLMError("response JSON is not an object")
     return value
