@@ -6,7 +6,9 @@ from types import SimpleNamespace
 from unittest import mock
 
 from rauxa.pipeline.config import BackendConfig
-from rauxa.pipeline.llm import AnthropicBackend, LLMError, OpenAICompatibleBackend
+import urllib.error
+
+from rauxa.pipeline.llm import AnthropicBackend, BackendUnavailable, LLMError, OpenAICompatibleBackend
 
 MESSAGES = [
     {"role": "system", "content": "You are a strict reviewer."},
@@ -118,18 +120,31 @@ class TestAnthropicBackend(unittest.TestCase):
                 with self.assertRaises(LLMError):
                     backend.chat_json(MESSAGES)
 
+    def test_setup_errors_stop_the_run(self):
+        module, _ = fake_anthropic([])
+        with mock.patch.dict(sys.modules, {"anthropic": module}):
+            backend = AnthropicBackend(BackendConfig(type="anthropic", model="claude-opus-5-5"))
+            no_credentials = TypeError('"Could not resolve authentication method. Expected one of api_key..."')
+            for error in (module.APIStatusError("invalid x-api-key", 401), module.APIStatusError("no such model", 404), no_credentials):
+                backend.client.beta.messages.create = mock.Mock(side_effect=error)
+                with self.assertRaises(BackendUnavailable):
+                    backend.chat_json(MESSAGES)
+            backend.client.beta.messages.create = mock.Mock(side_effect=TypeError("unrelated bug"))
+            with self.assertRaisesRegex(TypeError, "unrelated bug"):
+                backend.chat_json(MESSAGES)
+
     def test_api_key_env(self):
         module, calls = fake_anthropic([])
         with mock.patch.dict(sys.modules, {"anthropic": module}), mock.patch.dict("os.environ", {"MY_KEY": "sk-test"}):
             AnthropicBackend(BackendConfig(type="anthropic", model="claude-opus-5-5", api_key_env="MY_KEY"))
             self.assertEqual(calls[0][1]["api_key"], "sk-test")
         with mock.patch.dict(sys.modules, {"anthropic": module}), mock.patch.dict("os.environ", {}, clear=True):
-            with self.assertRaisesRegex(LLMError, "MY_KEY"):
+            with self.assertRaisesRegex(BackendUnavailable, "MY_KEY"):
                 AnthropicBackend(BackendConfig(type="anthropic", model="claude-opus-5-5", api_key_env="MY_KEY"))
 
     def test_missing_sdk_explains_install(self):
         with mock.patch.dict(sys.modules, {"anthropic": None}):
-            with self.assertRaisesRegex(LLMError, r'pip install -e "\.\[anthropic\]"'):
+            with self.assertRaisesRegex(BackendUnavailable, r'pip install -e "\.\[anthropic\]"'):
                 AnthropicBackend(BackendConfig(type="anthropic", model="claude-opus-5-5"))
 
 
@@ -145,6 +160,13 @@ class TestOpenAICompatibleBackend(unittest.TestCase):
         backend._post = fake_post
         self.assertEqual(backend.chat_json(MESSAGES), {"ok": True})
         return sent
+
+    def test_rejected_key_stops_the_run(self):
+        backend = OpenAICompatibleBackend(BackendConfig(base_url="http://x", model="m"))
+        backend._post = mock.Mock(side_effect=urllib.error.HTTPError("http://x", 401, "Unauthorized", {}, None))
+        with self.assertRaisesRegex(BackendUnavailable, "rejected"):
+            backend.chat_json(MESSAGES)
+        self.assertEqual(backend._post.call_count, 1)  # not retried
 
     def test_temperature_only_when_set(self):
         self.assertNotIn("temperature", self.payload_for())

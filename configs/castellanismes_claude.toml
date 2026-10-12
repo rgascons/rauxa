@@ -3,9 +3,9 @@
 #   pip install -e ".[anthropic]"
 #   export ANTHROPIC_API_KEY=...
 #
-# Cost: about $2-4 at the sizes below (the judge is most of it). Writer and judge are the
-# same model family, so the manifest will warn about self-preference; for a stricter setup,
-# use a writer from another provider (see castellanismes_full.toml) and keep Claude as judge.
+# Writer and judge are the same model family, so the manifest will warn about self-preference;
+# for a stricter setup, use a writer from another provider (see castellanismes_full.toml)
+# and keep Claude as judge.
 
 [run]
 name = "castellanismes_claude"

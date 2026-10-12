@@ -185,6 +185,23 @@ class TestLLMRoles(unittest.TestCase):
             self.assertEqual(result.manifest["judge"]["failed_questions"], {"natural": 1})
             self.assertTrue(any("same model family" in w for w in result.manifest["warnings"]))
 
+    def test_unusable_backend_stops_the_run(self):
+        from rauxa.pipeline.llm import BackendUnavailable
+
+        class Unusable(FakeBackend):
+            def chat_json(self, messages):
+                raise BackendUnavailable("the API key was rejected (HTTP 401)")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            pipeline = Pipeline(
+                self._config(tmp), lt_client=FakeLanguageTool(),
+                backends={"writer": FakeBackend("qwen2.5-72b", pairs=self.PAIRS), "judge": Unusable("gpt-4o")},
+                log=lambda _: None,
+            )
+            with self.assertRaises(BackendUnavailable):
+                pipeline.run()
+            self.assertFalse((Path(tmp) / "run" / "judge.jsonl").exists())  # nothing recorded as a judge error
+
     def test_judge_error_policy(self):
         for on_error, expect_kept in (("reject", False), ("keep", True)):
             with tempfile.TemporaryDirectory() as tmp:

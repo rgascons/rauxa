@@ -84,12 +84,18 @@ def cmd_export_lm_eval(args: argparse.Namespace) -> int:
 
 def cmd_run(args: argparse.Namespace) -> int:
     from .pipeline import Pipeline, PipelineError, load_config
+    from .pipeline.llm import BackendUnavailable
 
     config = load_config(args.config)
     try:
         result = Pipeline(config, resume=args.resume).run()
     except PipelineError as e:
         print(f"error: {e}", file=sys.stderr)
+        return 1
+    except BackendUnavailable as e:
+        print(f"error: {e}", file=sys.stderr)
+        print(f"Fix this, then continue with: rauxa run {args.config} --resume "
+              "(everything done so far is kept)", file=sys.stderr)
         return 1
     print(result.path)
     return {"complete": 0, "incomplete": 2, "waiting": 3}[result.status]

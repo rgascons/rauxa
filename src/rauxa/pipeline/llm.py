@@ -24,7 +24,17 @@ from .config import BackendConfig
 
 
 class LLMError(RuntimeError):
-    pass
+    """One call failed (bad reply, timeout, refusal...). The pipeline records it and carries on."""
+
+
+class BackendUnavailable(RuntimeError):
+    """The backend can't work at all: missing SDK, missing or rejected credentials, unknown
+    model or endpoint. Unlike ``LLMError`` this stops the run, so a setup mistake doesn't
+    quietly turn into hundreds of failed calls and rejected pairs."""
+
+
+# HTTP statuses that mean a setup problem rather than a failed call.
+_SETUP_STATUSES = {401: "the API key was rejected", 403: "the API key lacks permission", 404: "model or endpoint not found"}
 
 
 class AwaitingAgent(Exception):
@@ -43,7 +53,7 @@ class OpenAICompatibleBackend:
         self.model = config.model
         self._api_key = os.environ.get(config.api_key_env, "") if config.api_key_env else ""
         if config.api_key_env and not self._api_key:
-            raise LLMError(f"environment variable {config.api_key_env} is not set")
+            raise BackendUnavailable(f"{config.model}: environment variable {config.api_key_env} is not set")
 
     def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
         headers = {"Content-Type": "application/json"}
@@ -69,6 +79,13 @@ class OpenAICompatibleBackend:
             try:
                 body = self._post(payload)
                 return parse_json_object(body["choices"][0]["message"]["content"])
+            except urllib.error.HTTPError as e:
+                if e.code in _SETUP_STATUSES:
+                    raise BackendUnavailable(
+                        f"{self.model} at {self.config.base_url}: {_SETUP_STATUSES[e.code]} (HTTP {e.code})"
+                    ) from e
+                last_error = e
+                time.sleep(min(2**attempt, 10))
             except (urllib.error.URLError, TimeoutError, KeyError, ValueError, LLMError) as e:
                 last_error = e
                 time.sleep(min(2**attempt, 10))
@@ -91,7 +108,7 @@ class AnthropicBackend:
         try:
             import anthropic
         except ImportError as e:
-            raise LLMError(
+            raise BackendUnavailable(
                 "backend type 'anthropic' needs Anthropic's SDK: pip install -e \".[anthropic]\""
             ) from e
         self._anthropic = anthropic
@@ -101,7 +118,7 @@ class AnthropicBackend:
         if config.api_key_env:
             key = os.environ.get(config.api_key_env, "")
             if not key:
-                raise LLMError(f"environment variable {config.api_key_env} is not set")
+                raise BackendUnavailable(f"{config.model}: environment variable {config.api_key_env} is not set")
             kwargs["api_key"] = key
         if config.base_url:
             kwargs["base_url"] = config.base_url
@@ -129,9 +146,19 @@ class AnthropicBackend:
         except anthropic.RateLimitError as e:
             raise LLMError(f"{self.model}: rate limited after retries: {e}") from e
         except anthropic.APIStatusError as e:
+            if e.status_code in _SETUP_STATUSES:
+                raise BackendUnavailable(f"{self.model}: {_SETUP_STATUSES[e.status_code]} (HTTP {e.status_code})") from e
             raise LLMError(f"{self.model}: API error {e.status_code}: {e}") from e
         except anthropic.APIConnectionError as e:
             raise LLMError(f"{self.model}: connection error: {e}") from e
+        except TypeError as e:
+            # The SDK raises TypeError when it finds no credentials at all.
+            if "authentication" in str(e).lower():
+                raise BackendUnavailable(
+                    f"{self.model}: no Anthropic credentials found. Set ANTHROPIC_API_KEY (or "
+                    "api_key_env in the config), or log in with `ant auth login`"
+                ) from e
+            raise
         if response.stop_reason == "refusal":
             category = getattr(response.stop_details, "category", None)
             raise LLMError(f"{self.model} declined the request (category: {category})")
