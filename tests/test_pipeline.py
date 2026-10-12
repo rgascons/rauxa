@@ -144,7 +144,7 @@ class TestLLMRoles(unittest.TestCase):
                 SourceConfig(type="llm", task=TASK, backend="writer", count=3, batch_size=3, phenomena=["tenir_que"]),
             ],
             judge=JudgeConfig(enabled=True, backend="judge", on_error=on_error, workers=2),
-            backends={"writer": BackendConfig("http://x", "qwen2.5-72b"), "judge": BackendConfig("http://y", "qwen3-235b")},
+            backends={"writer": BackendConfig(base_url="http://x", model="qwen2.5-72b"), "judge": BackendConfig(base_url="http://y", model="qwen3-235b")},
         )
 
     def test_writer_fix_and_judge(self):
@@ -183,6 +183,51 @@ class TestLLMRoles(unittest.TestCase):
                 if not expect_kept:
                     self.assertEqual(result.selected, 0)
                     self.assertEqual(result.status, "incomplete")
+
+
+class TestAgentBackend(unittest.TestCase):
+    """The run stops with status "waiting"; an agent answers the request files; --resume continues."""
+
+    def test_agent_round_trip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = config(
+                tmp, target_size=50, min_share={},
+                sources=[
+                    procedural_source(phenomena=["tenir_que"]),
+                    SourceConfig(type="llm", task=TASK, backend="writer", count=3, batch_size=3, phenomena=["tenir_que"]),
+                ],
+                judge=JudgeConfig(enabled=True, backend="judge", source_types=["llm"], workers=1),
+                backends={
+                    "writer": BackendConfig(type="agent", model="claude-sonnet-5-5"),
+                    "judge": BackendConfig(type="agent", model="gpt-5"),
+                },
+            )
+            # Plays the agent: answers each request with the same logic as the fake API backend.
+            agent = FakeBackend("agent", pairs=TestLLMRoles.PAIRS, verdict={"actors": {"natural": False}})
+            exchange = Path(tmp) / "run" / "agent_exchange"
+            statuses = []
+            for attempt in range(10):
+                result = Pipeline(cfg, resume=attempt > 0, lt_client=FakeLanguageTool(), log=lambda _: None).run()
+                statuses.append(result.status)
+                if result.status != "waiting":
+                    break
+                for request in sorted((exchange / "requests").glob("*.json")):
+                    data = json.loads(request.read_text(encoding="utf-8"))
+                    self.assertTrue((exchange / "requests" / f"{data['id']}.md").exists())
+                    answer = agent.chat_json(data["messages"])
+                    (exchange / "responses" / f"{data['id']}.json").write_text(json.dumps(answer, ensure_ascii=False), encoding="utf-8")
+
+            self.assertEqual(statuses[0], "waiting")
+            self.assertEqual(result.status, "complete")
+            self.assertGreaterEqual(len(statuses), 3)  # write, then fix + judge, then the rest
+            self.assertFalse(list((exchange / "requests").glob("*.json")))  # answered requests move to done/
+
+            written = [e for e in read_jsonl(Path(tmp) / "run" / "candidates.jsonl") if e["metadata"]["source"]["type"] == "llm"]
+            self.assertEqual(len(written), 4)  # 3 written + 1 fixed
+            kept = read_jsonl(result.path)
+            self.assertIn("not_used_for_source", {e["metadata"]["qc"]["decision"].get("judge") for e in kept})
+            self.assertNotIn("Els actors tenen que assajar cada tarda.", {e["metadata"]["sentence_bad"] for e in kept})
+            self.assertTrue(any("played by a coding agent" in w for w in result.manifest["warnings"]))
 
 
 class TestCalibration(unittest.TestCase):

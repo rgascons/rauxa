@@ -90,7 +90,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(f"error: {e}", file=sys.stderr)
         return 1
     print(result.path)
-    return 0 if result.status == "complete" else 2
+    return {"complete": 0, "incomplete": 2, "waiting": 3}[result.status]
 
 
 def cmd_review(args: argparse.Namespace) -> int:

@@ -8,6 +8,9 @@ judge → keep or drop. Rounds repeat until the kept pool reaches
 The dataset is then selected from the pool and written as ``dataset.jsonl`` when it is
 complete, or ``dataset.incomplete.jsonl`` when it is too small or a minimum share is missed.
 
+With ``agent`` backends, LLM calls are written as files for a coding agent to answer. The run
+stops with status "waiting" while any are unanswered and continues with ``--resume``.
+
 Run directory (files are append-only or replaced atomically, so a run can resume):
 
     state.json                 progress: rounds, generator indices, LLM requests
@@ -39,7 +42,7 @@ from ..qc.languagetool import LanguageToolClient
 from .agents import Judge, Writer, WrittenPair, failed_questions, llm_entry
 from .checks import build_checks, run_checks
 from .config import RunConfig, SourceConfig
-from .llm import ChatBackend, LLMError, OpenAICompatibleBackend, model_family
+from .llm import AgentFileBackend, AwaitingAgent, ChatBackend, LLMError, OpenAICompatibleBackend, model_family
 from .selection import item_id, select, share_report
 
 _HUGE = 2**31 - 1
@@ -54,7 +57,7 @@ class PipelineError(RuntimeError):
 
 @dataclass
 class RunResult:
-    status: str  # "complete" or "incomplete"
+    status: str  # "complete", "incomplete", or "waiting" (agent requests to answer)
     path: Path
     selected: int
     manifest: dict[str, Any]
@@ -160,7 +163,21 @@ class Pipeline:
         needed = {s.backend for s in self.cfg.sources if s.type == "llm"}
         if self.cfg.judge.enabled:
             needed.add(self.cfg.judge.backend)
-        return {name: OpenAICompatibleBackend(self.cfg.backends[name]) for name in needed}
+        backends: dict[str, ChatBackend] = {}
+        for name in needed:
+            config = self.cfg.backends[name]
+            if config.type == "agent":
+                backends[name] = AgentFileBackend(config, self.dir / "agent_exchange")
+            else:
+                backends[name] = OpenAICompatibleBackend(config)
+        return backends
+
+    def _pending_requests(self) -> set[str]:
+        """Agent requests raised during this run that have no response yet."""
+        pending: set[str] = set()
+        for backend in self.backends.values():
+            pending |= getattr(backend, "pending", set())
+        return pending
 
     # -- making candidates -------------------------------------------------------------
 
@@ -220,12 +237,18 @@ class Pipeline:
         phenomena = src.phenomena or list(self.info[src.task])
         out: list[dict[str, Any]] = []
         consecutive_errors = 0
+        waiting_offset = 0  # batches handed to an agent and not answered yet
         while n > 0 and consecutive_errors < 3:
-            phenomenon = phenomena[(st["requested"] // max(src.batch_size, 1)) % len(phenomena)]
+            batch_index = (st["requested"] + waiting_offset) // max(src.batch_size, 1)
+            phenomenon = phenomena[batch_index % len(phenomena)]
             k = min(src.batch_size, n)
             try:
                 pairs = self.writers[i].write(self.info[src.task][phenomenon], self._examples(src.task, phenomenon), k)
                 consecutive_errors = 0
+            except AwaitingAgent:
+                waiting_offset += k
+                n -= k
+                continue
             except LLMError as e:
                 self.state["writer_errors"] += 1
                 consecutive_errors += 1
@@ -241,16 +264,21 @@ class Pipeline:
             st["exhausted"] = True
         return out
 
-    def _make(self, n: int) -> list[dict[str, Any]]:
+    def _make_from_llm_sources(self) -> list[dict[str, Any]]:
+        """LLM sources always ask for everything they still have to request (their ``count``)."""
         new: list[dict[str, Any]] = []
         for i, src in enumerate(self.cfg.sources):
-            if src.type == "llm" and not self.state["sources"][str(i)]["exhausted"]:
-                new += self._make_llm(i, src, n)
-        remaining = max(n - len(new), 0)
+            st = self.state["sources"][str(i)]
+            if src.type == "llm" and not st["exhausted"]:
+                new += self._make_llm(i, src, src.count - st["requested"])
+        return new
+
+    def _make_procedural_share(self, n: int) -> list[dict[str, Any]]:
+        new: list[dict[str, Any]] = []
         procedural = [(i, s) for i, s in enumerate(self.cfg.sources) if s.type == "procedural"]
         total_weight = sum(s.weight for _, s in procedural) or 1.0
         for i, src in procedural:
-            new += self._make_procedural(i, src, math.ceil(remaining * src.weight / total_weight))
+            new += self._make_procedural(i, src, math.ceil(n * src.weight / total_weight))
         return new
 
     # -- checks and judge --------------------------------------------------------------
@@ -275,59 +303,91 @@ class Pipeline:
         with ThreadPoolExecutor(workers) as pool:
             all_results = list(pool.map(lambda e: run_checks(self.checks, e), pending))
         for entry, results in zip(pending, all_results):
-            record = self._record_checks(entry, results)
-            if not record["passed"] and entry["metadata"]["source"]["type"] == "llm":
-                self._fix(entry, record)
+            self._record_checks(entry, results)
 
-    def _fix(self, entry: dict[str, Any], record: dict[str, Any]) -> None:
-        """Ask the LLM writer to fix a pair that failed the checks, then check it again."""
-        i = entry["metadata"]["source"]["index"]
-        src = self.cfg.sources[i]
-        phenomenon = entry["metadata"]["phenomenon"]
-        current, current_record = entry, record
-        for _ in range(src.max_fix_attempts):
-            failing = next(r for r in current_record["results"] if not r["passed"])
-            problems = [f"{failing['check']}: {json.dumps(failing['details'], ensure_ascii=False)}"]
-            meta = current["metadata"]
-            pair = WrittenPair(meta["sentence_good"], meta["sentence_bad"],
-                               [v for v in meta["correct_variants"] if v != meta["sentence_good"]])
-            try:
-                fixed = self.writers[i].fix(self.info[src.task][phenomenon], pair, problems)
-            except LLMError as e:
-                self.log(f"fix attempt failed: {e}")
-                return
-            candidate = self._add_candidate(self._llm_entry(i, src, phenomenon, fixed, revision_of=meta["item_id"]), i)
-            if candidate is None:
-                return
-            current, current_record = candidate, self._record_checks(candidate, run_checks(self.checks, candidate))
-            if current_record["passed"]:
+    def _fix_depth(self, iid: str) -> int:
+        """How many fixes led to pair ``iid`` (0 for a pair as first written)."""
+        depth, meta = 0, self.candidates[iid]["metadata"]
+        while meta.get("revision_of") in self.candidates:
+            depth += 1
+            meta = self.candidates[meta["revision_of"]]["metadata"]
+        return depth
+
+    def _fix_pending(self) -> None:
+        """Ask the LLM writer to fix pairs that failed the checks, then check the fixes.
+
+        Which pairs still need a fix is worked out from the run files, so this resumes
+        correctly when fixes come from an agent over several runs.
+        """
+        given_up = self.state.setdefault("fix_given_up", [])
+        while True:
+            fixed_already = {e["metadata"].get("revision_of") for e in self.candidates.values()}
+            todo = []
+            for iid, rec in self.check_records.items():
+                meta = self.candidates[iid]["metadata"]
+                if rec["passed"] or meta["source"]["type"] != "llm" or iid in fixed_already or iid in given_up:
+                    continue
+                if self._fix_depth(iid) < self.cfg.sources[meta["source"]["index"]].max_fix_attempts:
+                    todo.append(iid)
+            progressed = False
+            for iid in todo:
+                meta = self.candidates[iid]["metadata"]
+                i = meta["source"]["index"]
+                src = self.cfg.sources[i]
+                failing = next(r for r in self.check_records[iid]["results"] if not r["passed"])
+                problems = [f"{failing['check']}: {json.dumps(failing['details'], ensure_ascii=False)}"]
+                pair = WrittenPair(meta["sentence_good"], meta["sentence_bad"],
+                                   [v for v in meta["correct_variants"] if v != meta["sentence_good"]])
+                try:
+                    fixed = self.writers[i].fix(self.info[src.task][meta["phenomenon"]], pair, problems)
+                except AwaitingAgent:
+                    continue
+                except LLMError as e:
+                    self.log(f"fix attempt failed: {e}")
+                    given_up.append(iid)
+                    continue
+                candidate = self._add_candidate(self._llm_entry(i, src, meta["phenomenon"], fixed, revision_of=iid), i)
+                if candidate is None:
+                    given_up.append(iid)
+                    continue
+                self._record_checks(candidate, run_checks(self.checks, candidate))
+                progressed = True
+            if not progressed:
                 return
 
     def _sampled_for_audit(self, iid: str) -> bool:
         return int(iid[:8], 16) / 0xFFFFFFFF < self.cfg.judge.sample_rate
+
+    def _judged_source(self, iid: str) -> bool:
+        types = self.cfg.judge.source_types
+        return not types or self.candidates[iid]["metadata"]["source"]["type"] in types
 
     def _judge_pending(self) -> None:
         if self.judge is None:
             return
         pending = [
             iid for iid, rec in self.check_records.items()
-            if rec["passed"] and iid not in self.judge_records
+            if rec["passed"] and iid not in self.judge_records and self._judged_source(iid)
             and (self.cfg.judge.mode == "filter" or self._sampled_for_audit(iid))
         ]
         if not pending:
             return
 
-        def judge(iid: str) -> dict[str, Any]:
+        def judge(iid: str) -> Optional[dict[str, Any]]:
             entry = self.candidates[iid]
             meta = entry["metadata"]
             info = self.info[self.cfg.sources[meta["source"]["index"]].task][meta["phenomenon"]]
             try:
                 return {"item_id": iid, "verdict": self.judge.judge(entry, info)}
+            except AwaitingAgent:
+                return None
             except LLMError as e:
                 return {"item_id": iid, "error": str(e)}
 
         with ThreadPoolExecutor(max(1, self.cfg.judge.workers)) as pool:
             for record in pool.map(judge, pending):
+                if record is None:
+                    continue
                 self.judge_records[record["item_id"]] = record
                 _append(self.paths["judge.jsonl"], record)
 
@@ -341,6 +401,8 @@ class Pipeline:
         judge_cfg = self.cfg.judge
         if not judge_cfg.enabled:
             return True, {"judge": "not_used"}
+        if not self._judged_source(iid):
+            return True, {"judge": "not_used_for_source"}
         record = self.judge_records.get(iid)
         if record is None:
             if judge_cfg.mode == "audit":
@@ -373,8 +435,13 @@ class Pipeline:
     def run(self) -> RunResult:
         goal = math.ceil(self.cfg.target_size * self.cfg.pool_multiplier)
         while True:
+            self._make_from_llm_sources()
             self._check_pending()
+            self._fix_pending()
             self._judge_pending()
+            pending = self._pending_requests()
+            if pending:
+                return self._wait(pending)
             kept_ids = self._kept_ids()
             kept = len(kept_ids)
             shortfalls = self._share_shortfalls(kept_ids)
@@ -392,13 +459,23 @@ class Pipeline:
             # Short on total: make the shortfall. Short only on a minimum share: make more, since
             # sources can't be steered to one value and only part of each batch will help.
             shortfall = goal - kept if kept < goal else 3 * sum(shortfalls.values())
-            new = self._make(math.ceil(shortfall / rate))
+            new = self._make_procedural_share(math.ceil(shortfall / rate))
             self.state["rounds_done"] += 1
             self._save_state()
             if not new and all(iid in self.check_records for iid in self.candidates):
                 self.log("no new candidates")
                 break
         return self._finish()
+
+    def _wait(self, pending: set[str]) -> RunResult:
+        """Stop until a coding agent answers the requests (``agent`` backends only)."""
+        self._save_state()
+        exchange = self.dir / "agent_exchange"
+        self.log(
+            f"waiting: {len(pending)} request(s) for the agent in {exchange / 'requests'}. "
+            "Answer each one in responses/<id>.json, then run again with --resume."
+        )
+        return RunResult("waiting", exchange, 0, {"pending_requests": sorted(pending)})
 
     def _finish(self) -> RunResult:
         kept, rejected = [], []
@@ -455,7 +532,7 @@ class Pipeline:
         warnings = []
         writer_models = {self.backends[s.backend].model for s in self.cfg.sources if s.type == "llm"}
         judge_model = self.backends[self.cfg.judge.backend].model if self.judge else None
-        families = lambda models: {model_family(m) for m in models}
+        families = lambda models: {model_family(m) for m in models if m}
         if judge_model and model_family(judge_model) in families(writer_models):
             warnings.append(f"judge ({judge_model}) is from the same model family as an LLM writer ({sorted(writer_models)})")
         overlap = families(self.cfg.evaluated_models) & families(writer_models | ({judge_model} if judge_model else set()))
@@ -470,6 +547,14 @@ class Pipeline:
             warnings.append(f"{kept_on_error} pairs kept even though the judge call failed")
         if not self.cfg.judge.enabled:
             warnings.append("no judge used: pairs were kept on the automatic checks alone")
+        agent_backends = sorted(n for n, b in self.backends.items() if isinstance(b, AgentFileBackend))
+        if agent_backends:
+            warnings.append(
+                f"LLM roles {agent_backends} were played by a coding agent through files; "
+                "treat this as an approximation of an API run"
+            )
+            if any(not self.backends[n].model for n in agent_backends):
+                warnings.append("agent backend without a model name: same-family checks were skipped for it")
         for dim, rows in shares["fields"].items():
             for value, row in rows.items():
                 if not row["ok"]:

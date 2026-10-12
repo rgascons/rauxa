@@ -1,16 +1,22 @@
-"""Minimal client for OpenAI-compatible chat completions (OpenAI, vLLM, Ollama, llama.cpp...).
+"""LLM backends. Both return a parsed JSON object from ``chat_json``.
 
-Standard library only. Agents use ``chat_json`` and get a parsed JSON object back.
+- ``OpenAICompatibleBackend``: OpenAI-compatible chat completions (OpenAI, vLLM, Ollama...).
+- ``AgentFileBackend``: requests written to files and answered by a coding agent.
+
+Standard library only.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
+import threading
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Any, Protocol
 
 from .config import BackendConfig
@@ -18,6 +24,10 @@ from .config import BackendConfig
 
 class LLMError(RuntimeError):
     pass
+
+
+class AwaitingAgent(Exception):
+    """Raised by ``AgentFileBackend`` when a request has been written but not answered yet."""
 
 
 class ChatBackend(Protocol):
@@ -64,6 +74,78 @@ class OpenAICompatibleBackend:
                 last_error = e
                 time.sleep(min(2**attempt, 10))
         raise LLMError(f"{self.model}: failed after {self.config.max_retries} attempts: {last_error}")
+
+
+_REQUEST_TEMPLATE = """\
+# Request {rid}
+
+Reply as the assistant in the conversation below. Write a single JSON object and nothing
+else to this file (relative to the `agent_exchange` folder):
+
+    responses/{rid}.json
+
+Answer from the conversation alone: don't read the run's other files to decide.
+
+## System
+
+{system}
+
+## User
+
+{user}
+"""
+
+
+class AgentFileBackend:
+    """Serves LLM calls through files, so a coding agent can play the LLM roles.
+
+    Each call is identified by a hash of its messages. If ``responses/<id>.json`` exists it is
+    returned; otherwise the prompt is written to ``requests/<id>.md`` (and ``.json``) and
+    ``AwaitingAgent`` is raised. Prompts are deterministic, so a resumed run asks again for
+    exactly the requests it is still missing.
+    """
+
+    def __init__(self, config: BackendConfig, exchange_dir: Path):
+        self.config = config
+        self.model = config.model
+        self.exchange_dir = exchange_dir
+        self.requests = exchange_dir / "requests"
+        self.responses = exchange_dir / "responses"
+        self.done = self.requests / "done"
+        for d in (self.requests, self.responses, self.done):
+            d.mkdir(parents=True, exist_ok=True)
+        self.pending: set[str] = set()
+        self._lock = threading.Lock()
+
+    @staticmethod
+    def request_id(messages: list[dict[str, str]]) -> str:
+        blob = json.dumps(messages, ensure_ascii=False, sort_keys=True)
+        return hashlib.sha1(blob.encode()).hexdigest()[:16]
+
+    def chat_json(self, messages: list[dict[str, str]]) -> dict[str, Any]:
+        rid = self.request_id(messages)
+        response = self.responses / f"{rid}.json"
+        if response.exists():
+            try:
+                value = parse_json_object(response.read_text(encoding="utf-8"))
+            except (ValueError, LLMError) as e:
+                raise LLMError(f"agent response {response.name} is not a valid JSON object: {e}") from e
+            for suffix in (".md", ".json"):
+                request = self.requests / f"{rid}{suffix}"
+                if request.exists():
+                    os.replace(request, self.done / request.name)
+            return value
+        md = self.requests / f"{rid}.md"
+        if not md.exists():
+            system = next((m["content"] for m in messages if m["role"] == "system"), "")
+            user = "\n\n".join(m["content"] for m in messages if m["role"] == "user")
+            md.write_text(_REQUEST_TEMPLATE.format(rid=rid, system=system, user=user), encoding="utf-8")
+            (self.requests / f"{rid}.json").write_text(
+                json.dumps({"id": rid, "messages": messages}, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        with self._lock:
+            self.pending.add(rid)
+        raise AwaitingAgent(rid)
 
 
 def parse_json_object(text: str) -> dict[str, Any]:

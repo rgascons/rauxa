@@ -109,6 +109,16 @@ The writer and the judge use any OpenAI-compatible chat endpoint (OpenAI, vLLM, 
 llama.cpp server...). Keys are read from the environment variable named by `api_key_env`; local
 servers need none. See [configs/castellanismes_full.toml](configs/castellanismes_full.toml).
 
+### Without an API: a coding agent plays the LLM roles
+
+With `type = "agent"` backends, each LLM call is written to
+`agent_exchange/requests/<id>.md` and the run stops with status `waiting` (exit code 3). A
+coding agent such as Claude Code or Codex answers each request in `responses/<id>.json`, and
+`rauxa run CONFIG --resume` continues. Everything except the LLM answers runs as normal, with
+the same prompts as an API run. Open the repo in your agent and ask it to follow
+[AGENT_PIPELINE.md](AGENT_PIPELINE.md); the config is
+[configs/castellanismes_agent.toml](configs/castellanismes_agent.toml).
+
 ## Setup
 
 No Python dependencies. LanguageTool needs Java 17+:
@@ -125,6 +135,7 @@ export PYTHONPATH=src
 python3 -m rauxa list
 python3 -m rauxa run configs/castellanismes_procedural.toml           # pipeline, no LLM
 python3 -m rauxa run configs/castellanismes_full.toml                 # + LLM writer and judge
+python3 -m rauxa run configs/castellanismes_agent.toml [--resume]     # LLM roles played by a coding agent
 python3 -m rauxa generate castellanismes_verbals --size 1000 -o out/raw.jsonl   # generator only
 python3 -m rauxa review out/runs/castellanismes_procedural/dataset.jsonl out/labels.jsonl --n 100 --reviewer ricard
 python3 -m rauxa calibrate out/labels.jsonl out/runs/castellanismes_procedural

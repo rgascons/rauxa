@@ -62,6 +62,13 @@ class TestDataset(unittest.TestCase):
             for good in meta["correct_variants"]:
                 self.assertIsNone(marker.search(good), good)
 
+    def test_impersonal_se_agrees_with_plural_object(self):
+        variants = [v for e in self.entries if e["metadata"]["phenomenon"] == "hi_ha_que"
+                    for v in e["metadata"]["correct_variants"]]
+        self.assertIn("S'han de regar les plantes.", variants)
+        for v in variants:
+            self.assertNotRegex(v, r"\bs'ha de (\w+ )?(els|les)\b", v)
+
     def test_oracle_answers_score_one(self):
         for entry in self.entries:
             self.assertEqual(self.data.score_answer(entry["answer"], entry), 1.0)

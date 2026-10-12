@@ -1,0 +1,54 @@
+# Runs the pipeline with a coding agent (Claude Code, Codex, Gemini CLI...) playing the LLM
+# writer and judge instead of an API. See AGENT_PIPELINE.md for the instructions to give it.
+#
+# Sizes are kept small: every LLM call becomes a file the agent has to answer.
+
+[run]
+name = "castellanismes_agent"
+target_size = 500
+seed = 1
+pool_multiplier = 1.2
+evaluated_models = []
+
+[[sources]]
+type = "procedural"
+task = "castellanismes_verbals"
+
+[sources.params]
+tenses = ["present", "imperfect", "future", "conditional", "periphrastic_past", "perfect"]
+formats = ["mcq", "judgement", "gec"]
+
+[[sources]]
+type = "llm"
+task = "castellanismes_verbals"
+backend = "writer"
+count = 60            # pairs the agent writes in total, in batches
+batch_size = 15
+max_fix_attempts = 2
+
+[checks.languagetool]
+enabled = true        # needs Java and a local LanguageTool server; set to false if you have neither
+url = "http://localhost:8081"
+
+[judge]
+enabled = true
+backend = "judge"
+mode = "filter"
+source_types = ["llm"]   # only judge LLM-written pairs; template pairs are correct by construction
+on_error = "reject"
+workers = 1
+
+# Set `model` to the model your agent runs on (e.g. "claude-sonnet-5-5", "gpt-5-codex").
+# It is recorded in the manifest and used to warn when writer and judge are the same family.
+[backends.writer]
+type = "agent"
+model = ""
+
+[backends.judge]
+type = "agent"
+model = ""
+
+[min_share.phenomenon]
+tenir_que = 0.25
+hi_ha_que = 0.2
+donar_se_compte = 0.25

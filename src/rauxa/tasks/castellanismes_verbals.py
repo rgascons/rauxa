@@ -282,6 +282,14 @@ def _realise_tenir_que(rng: Random, cfg: "CastellanismesVerbalsConfig", tense: T
     return _Realisation(good, bad, (good,), {"person": person, "negated": negated, "infinitive": inf})
 
 
+_PLURAL_COMPLEMENTS = frozenset({"més hores", "més diners", "pa i llet", "vuit hores"})
+
+
+def _plural_object(complement: str) -> bool:
+    """Whether the complement's head is plural (it becomes the subject of passive "es")."""
+    return complement.startswith(("els ", "les ")) or complement in _PLURAL_COMPLEMENTS
+
+
 def _realise_hi_ha_que(rng: Random, cfg: "CastellanismesVerbalsConfig", tense: Tense) -> _Realisation:
     prefix = _adverb(rng, cfg, tense)
     inf, compl = rng.choice(_INFINITIVE_PHRASES)
@@ -291,7 +299,9 @@ def _realise_hi_ha_que(rng: Random, cfg: "CastellanismesVerbalsConfig", tense: T
     details = {"person": None, "negated": False, "infinitive": inf}
     if inf in _NO_IMPERSONAL_SE:
         return _Realisation(cal, bad, (cal,), details)
-    s_ha_de = sentence(prefix + _with_reflexive("3sg", _finite_chain("haver", tense, "3sg")) + [elide_de(inf), compl])
+    # Passive "es" + modal agrees with a plural subject: "s'han de regar les plantes".
+    person = "3pl" if _plural_object(compl) else "3sg"
+    s_ha_de = sentence(prefix + _with_reflexive(person, _finite_chain("haver", tense, person)) + [elide_de(inf), compl])
     good, alternative = (cal, s_ha_de) if rng.random() < 0.5 else (s_ha_de, cal)
     return _Realisation(good, bad, (good, alternative), details)
 

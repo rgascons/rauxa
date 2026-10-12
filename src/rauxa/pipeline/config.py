@@ -12,10 +12,16 @@ from typing import Any, Literal, Optional
 
 @dataclass
 class BackendConfig:
-    """An OpenAI-compatible chat completions endpoint (OpenAI, vLLM, Ollama, llama.cpp...)."""
+    """Where LLM calls go.
 
-    base_url: str
-    model: str
+    - ``openai``: an OpenAI-compatible chat completions endpoint (OpenAI, vLLM, Ollama...).
+    - ``agent``: files answered by a coding agent (Claude Code, Codex...). The run stops
+      with status "waiting" and resumes once the requests are answered. See AGENT_PIPELINE.md.
+    """
+
+    type: Literal["openai", "agent"] = "openai"
+    base_url: str = ""
+    model: str = ""  # for "agent", the model the agent runs on (recorded, used for family warnings)
     api_key_env: Optional[str] = None  # name of the env var holding the key; None for local servers
     temperature: float = 0.7
     json_mode: bool = True  # send response_format={"type": "json_object"}
@@ -71,6 +77,8 @@ class JudgeConfig:
     sample_rate: float = 0.05  # audit mode only
     # What to do with a pair when the judge call fails (e.g. the endpoint is down).
     on_error: Literal["reject", "keep"] = "reject"
+    # Only judge pairs from these source types (e.g. ["llm"]); empty means all.
+    source_types: list[str] = field(default_factory=list)
     workers: int = 4
 
 
@@ -102,6 +110,10 @@ class RunConfig:
             needed.add(self.judge.backend)
         missing = needed - set(self.backends)
         assert not missing, f"backends not configured: {sorted(missing)}"
+        for name in needed:
+            backend = self.backends[name]
+            if backend.type == "openai":
+                assert backend.base_url and backend.model, f"backend '{name}' needs base_url and model"
         for dim, shares in self.min_share.items():
             assert sum(shares.values()) <= 1.0 + 1e-9, f"min_share for '{dim}' sums to more than 1"
 
@@ -127,7 +139,6 @@ def load_config(path: str | Path) -> RunConfig:
         judge=JudgeConfig(**raw.get("judge", {})),
         backends={name: BackendConfig(**b) for name, b in raw.get("backends", {}).items()},
         min_share=raw.get("min_share", {}),
-        evaluated_models=raw.get("evaluated_models", []),
     )
     config.validate()
     return config
