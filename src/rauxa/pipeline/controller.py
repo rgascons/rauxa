@@ -42,6 +42,7 @@ from ..qc.languagetool import LanguageToolClient
 from .agents import Judge, Writer, WrittenPair, failed_questions, llm_entry
 from .checks import build_checks, run_checks
 from .config import RunConfig, SourceConfig
+from .progress import Progress
 from .llm import (
     AgentFileBackend,
     AnthropicBackend,
@@ -106,11 +107,19 @@ class Pipeline:
         lt_client: Optional[LanguageToolClient] = None,
         backends: Optional[dict[str, ChatBackend]] = None,
         log: Optional[Callable[[str], None]] = None,
+        progress: Optional[Progress] = None,
     ):
         config.validate()
         self.cfg = config
         self.dir = config.run_dir()
-        self.log = log or (lambda msg: print(msg, file=sys.stderr, flush=True))
+        self.progress = progress or Progress()
+        write_log = log or (lambda msg: print(msg, file=sys.stderr, flush=True))
+
+        def _log(msg: str) -> None:
+            self.progress.clear()
+            write_log(msg)
+
+        self.log = _log
         self.paths = {
             name: self.dir / name
             for name in ("state.json", "candidates.jsonl", "checks.jsonl", "judge.jsonl", "manifest.json")
@@ -254,6 +263,8 @@ class Pipeline:
         out: list[dict[str, Any]] = []
         consecutive_errors = 0
         waiting_offset = 0  # batches handed to an agent and not answered yet
+        total, label = n, f"writing pairs ({self.backends[src.backend].model})"
+        self.progress.update(label, 0, total)
         while n > 0 and consecutive_errors < 3:
             batch_index = (st["requested"] + waiting_offset) // max(src.batch_size, 1)
             phenomenon = phenomena[batch_index % len(phenomena)]
@@ -273,6 +284,7 @@ class Pipeline:
                 continue
             st["requested"] += k
             n -= k
+            self.progress.update(label, total - n, total)
             for pair in pairs:
                 added = self._add_candidate(self._llm_entry(i, src, phenomenon, pair), i)
                 if added is not None:
@@ -318,9 +330,10 @@ class Pipeline:
             return
         workers = max(1, self.cfg.checks.languagetool.workers)
         with ThreadPoolExecutor(workers) as pool:
-            all_results = list(pool.map(lambda e: run_checks(self.checks, e), pending))
-        for entry, results in zip(pending, all_results):
-            self._record_checks(entry, results)
+            all_results = pool.map(lambda e: run_checks(self.checks, e), pending)
+            for done, (entry, results) in enumerate(zip(pending, all_results), 1):
+                self._record_checks(entry, results)
+                self.progress.update("checking", done, len(pending))
 
     def _fix_depth(self, iid: str) -> int:
         """How many fixes led to pair ``iid`` (0 for a pair as first written)."""
@@ -347,7 +360,8 @@ class Pipeline:
                 if self._fix_depth(iid) < self.cfg.sources[meta["source"]["index"]].max_fix_attempts:
                     todo.append(iid)
             progressed = False
-            for iid in todo:
+            for done, iid in enumerate(todo):
+                self.progress.update("fixing failed pairs", done, len(todo))
                 meta = self.candidates[iid]["metadata"]
                 i = meta["source"]["index"]
                 src = self.cfg.sources[i]
@@ -402,7 +416,8 @@ class Pipeline:
                 return {"item_id": iid, "error": str(e)}
 
         with ThreadPoolExecutor(max(1, self.cfg.judge.workers)) as pool:
-            for record in pool.map(judge, pending):
+            for done, record in enumerate(pool.map(judge, pending), 1):
+                self.progress.update(f"judging ({self.judge.backend.model})", done, len(pending))
                 if record is None:
                     continue
                 self.judge_records[record["item_id"]] = record
@@ -450,6 +465,12 @@ class Pipeline:
     # -- main loop ---------------------------------------------------------------------
 
     def run(self) -> RunResult:
+        try:
+            return self._run()
+        finally:
+            self.progress.clear()
+
+    def _run(self) -> RunResult:
         goal = math.ceil(self.cfg.target_size * self.cfg.pool_multiplier)
         while True:
             self._make_from_llm_sources()
