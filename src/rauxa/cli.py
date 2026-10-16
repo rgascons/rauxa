@@ -83,28 +83,59 @@ def cmd_export_lm_eval(args: argparse.Namespace) -> int:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    from .pipeline import Pipeline, PipelineError, load_config
+    from .pipeline import Pipeline, PipelineError
+    from .pipeline.config import load_settings, resolve_copilot
+    from .pipeline.dispatch import Dispatcher
     from .pipeline.llm import BackendUnavailable
+    from .pipeline.storage import RunLocked
 
-    config = load_config(args.config)
     try:
-        result = Pipeline(config, resume=args.resume).run()
-    except PipelineError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return 1
+        config, copilot = load_settings(args.config)
+        settings = resolve_copilot(
+            copilot, enabled=args.copilot, workers=args.copilot_workers,
+            max_calls=args.copilot_max_calls, command=args.copilot_command,
+        )
+        if settings.enabled:
+            result = Dispatcher(config, settings, resume=args.resume).run()
+        else:
+            with Pipeline(config, resume=args.resume) as pipeline:
+                if copilot.specified or (config.run_dir() / "dispatcher").exists() or any(
+                    value is not None for value in (args.copilot, args.copilot_workers, args.copilot_max_calls, args.copilot_command)
+                ):
+                    Dispatcher(config, settings).record_disabled()
+                result = pipeline.run()
+    except (KeyboardInterrupt, InterruptedError):
+        print("interrupted: completed work is saved; continue with the same config and --resume", file=sys.stderr)
+        return 130
     except BackendUnavailable as e:
         print(f"error: {e}", file=sys.stderr)
         print(f"Fix this, then continue with: rauxa run {args.config} --resume "
               "(everything done so far is kept)", file=sys.stderr)
         return 1
+    except (PipelineError, RunLocked, OSError, ValueError, TypeError, AssertionError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
     print(result.path)
     return {"complete": 0, "incomplete": 2, "waiting": 3}[result.status]
+
+
+def _dispatcher_summary(dispatcher: dict) -> None:
+    settings = dispatcher["settings"]
+    print(f"Copilot:  {dispatcher['status']}; {dispatcher['calls_used']}/{settings['max_calls']} calls reserved, "
+          f"{dispatcher['completed']} responses, {dispatcher['failed']} failed requests")
+    print(f"CLI:      {dispatcher['executable'] or 'not invoked'} ({dispatcher['cli_version'] or 'preflight not completed'})")
+    for key in ("enabled", "workers", "max_calls", "command"):
+        print(f"  {key}: {settings[key]} ({settings['origins'][key]})")
 
 
 def cmd_summary(args: argparse.Namespace) -> int:
     run_dir = Path(args.run_dir)
     manifest_path = run_dir / "manifest.json"
+    dispatcher_path = run_dir / "dispatcher" / "status.json"
+    dispatcher = json.loads(dispatcher_path.read_text(encoding="utf-8")) if dispatcher_path.exists() else None
     if not manifest_path.exists():
+        if dispatcher:
+            _dispatcher_summary(dispatcher)
         if (run_dir / "state.json").exists():
             print(f"{run_dir}: the run hasn't finished (it was interrupted, or it is waiting for an "
                   "agent). Continue it with: rauxa run CONFIG --resume", file=sys.stderr)
@@ -112,6 +143,8 @@ def cmd_summary(args: argparse.Namespace) -> int:
             print(f"{run_dir}: no run found here", file=sys.stderr)
         return 1
     m = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if dispatcher or m.get("dispatcher"):
+        _dispatcher_summary(dispatcher or m["dispatcher"])
     c = m["counts"]
     dataset = run_dir / ("dataset.jsonl" if m["status"] == "complete" else "dataset.incomplete.jsonl")
     print(f"Status:   {m['status']}  ({m['started_at']} → {m['finished_at']})")
@@ -192,6 +225,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("run", help="run the generation pipeline from a TOML config")
     p.add_argument("config")
     p.add_argument("--resume", action="store_true", help="continue an interrupted run with the same config")
+    p.add_argument("--copilot", action=argparse.BooleanOptionalAction, default=None,
+                   help="override [copilot] enabled: automatically answer agent requests inside WSL/Linux")
+    p.add_argument("--copilot-workers", type=int, help="override [copilot] workers (default: 4)")
+    p.add_argument("--copilot-max-calls", type=int, help="override cumulative Copilot invocation cap, including retries")
+    p.add_argument("--copilot-command", help="Copilot executable (otherwise RAUXA_COPILOT_BIN, then PATH)")
     p.set_defaults(func=cmd_run)
 
     p = sub.add_parser("summary", help="show the results of a pipeline run, with sample pairs")

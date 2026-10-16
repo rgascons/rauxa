@@ -108,8 +108,9 @@ same config a second time stops with "already holds a run":
 - If the run was interrupted (Ctrl+C, a crash), continue it with `--resume`.
 - For a fresh run, delete the folder or change `name`.
 
-A run refuses to resume if its config has changed since it started, so the results always
-match the config recorded in `manifest.json`.
+A run refuses to resume if its dataset config has changed since it started, so the results
+match the config recorded in `manifest.json`. Operational `[copilot]` settings are excluded:
+workers, call caps, and executable selection may change on resume without resetting usage.
 
 ## 6. Change what gets generated
 
@@ -131,7 +132,7 @@ Every key, with defaults and how they interact, is in [CONFIG.md](CONFIG.md).
 ## 7. Add LLMs (optional)
 
 An LLM writer adds more varied sentences than the templates, and an LLM judge reviews them.
-There are three ways to use them:
+There are four ways to use them:
 
 - **An API or a local model server.** Use
   [configs/castellanismes_full.toml](configs/castellanismes_full.toml) and set `base_url` and
@@ -150,10 +151,103 @@ There are three ways to use them:
 
 - **A coding agent instead of an API** (Claude Code, Codex...), at no API cost. Open the repo
   in your agent and ask it to follow [AGENT_PIPELINE.md](AGENT_PIPELINE.md).
+- **Automated Copilot CLI workers inside WSL/Linux.** Use the setup below. Copilot plan usage
+  and service limits still apply; this does not make generation free.
 
 Judging only LLM-written pairs (`source_types = ["llm"]` under `[judge]`) keeps the cost low:
 template pairs are correct by construction. Use models from different families for the writer
 and the judge when you can; a model judging its own sentences tends to approve them.
+
+### Automated Copilot CLI in WSL
+
+Run Python, Copilot CLI, and the pipeline **inside the same WSL distribution**, from the
+repository root. No Windows-to-WSL launcher or path translation is involved.
+
+Install GitHub Copilot CLI yourself using its
+[installation guide](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli).
+Check `copilot --version` and `copilot --help` in the shell that will launch rauxa.
+Rauxa checks the selected binary for non-interactive model selection, silent text output,
+disabled tools/MCP/custom instructions, disabled questions/updates/BASH_ENV, and disabled
+remote sessions/export. Unsupported CLI builds fail preflight rather than weakening isolation.
+
+Authenticate with a supported token environment variable (`COPILOT_GITHUB_TOKEN`, `GH_TOKEN`,
+or `GITHUB_TOKEN`; see the
+[CLI authentication reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference#copilot-login-options)).
+Do not put tokens in TOML or commit them. Token-based runs get an empty temporary Copilot
+profile for each request.
+
+Alternatively, use a **login-only Copilot profile** for normal CLI/keychain authentication:
+
+```bash
+export COPILOT_HOME="$HOME/.copilot-rauxa"
+copilot login
+```
+
+Do not add settings, hooks, plugins, instructions, MCP servers, or other customizations to
+this profile. Without a token environment variable, rauxa refuses customized profiles
+instead of loading potentially executable hooks or plugins. Your normal profile is never
+modified. Each request uses a fresh conversation in a temporary working directory, with no
+model tools; this is context/permission isolation, **not an OS sandbox**.
+
+For an executable not on PATH, set `RAUXA_COPILOT_BIN` to its executable name or path, or use
+`--copilot-command BIN`. Selection order is CLI, environment, then `copilot` on PATH.
+This machine-local setting intentionally has no TOML key; an invalid explicit choice fails.
+
+Start LanguageTool as in step 2, or explicitly disable it in your config before the first run.
+Copy [the Copilot config](configs/castellanismes_copilot.toml), choose models available to
+your account, and review its `[copilot]` section:
+
+```toml
+[copilot]
+enabled = true
+workers = 4
+max_calls = 500
+```
+
+Then run:
+
+```bash
+rauxa run configs/castellanismes_copilot.toml
+rauxa summary out/runs/castellanismes_copilot
+```
+
+The dispatcher answers the pipeline's writer, repair, and judge requests and resumes
+automatically. `workers` caps concurrent CLI calls across all roles. `max_calls` caps
+cumulative launch reservations, including retries, across the whole run.
+When the cap is reached, exit 3 means the remaining work is waiting, not failed. Raise the
+cap in TOML or override it when resuming:
+
+```bash
+rauxa run configs/castellanismes_copilot.toml --resume --copilot-max-calls 1000 --copilot-workers 2
+```
+
+CLI flags override TOML, which overrides defaults. Omitted flags do not mask TOML.
+Workers, caps, and executable choices can change on resume without changing the dataset
+fingerprint. Models, source budgets, and backend timeout/retry settings cannot.
+`--no-copilot` temporarily selects the manual file workflow.
+
+Transport/JSON failures are retried up to each backend's `max_retries` total attempts,
+with its `timeout` in seconds per attempt. Exhausted requests are recorded and processing
+continues; judge errors follow `judge.on_error`. Authentication/model setup failures stop
+the run. Ctrl+C/SIGTERM stops owned workers and preserves work (exit 130). A guard process
+keeps the run locked and enforces the timeout even if its coordinator dies unexpectedly.
+Do not delete `.run.lock` or run two controllers against one output directory.
+
+`dispatcher/events.jsonl` records reservations, outcomes, worker guard PIDs, and each
+invocation's effective settings and value origins. `dispatcher/status.json` and the final
+manifest report usage/failures; `rauxa summary` also works as a status report before a final
+manifest exists. Complete JSON answers are published atomically. A launch whose completion
+is unknown after a crash still consumes its reserved budget; exact once-only billing is
+not guaranteed.
+
+For a larger run, increase `sources.count` (LLM candidates requested), not just
+`run.target_size` (final pairs selected). Writers batch pairs, filter judges use one call
+per eligible pair, repairs add calls, and retries add invocations. A call cap is not an
+exact credit/token/currency limit. Start with a small run before scaling toward 10,000 LLM
+candidates, and keep writer/judge model families distinct when possible.
+
+Manual agent runs from the legacy exchange protocol remain manually resumable, but cannot
+be automatically adopted safely; use a fresh run name for Copilot dispatch.
 
 ## 8. Use the dataset
 

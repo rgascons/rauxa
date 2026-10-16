@@ -1,0 +1,50 @@
+# Run inside WSL/Linux with a supported, authenticated GitHub Copilot CLI.
+# Set models available to your account before starting. See GETTING_STARTED.md.
+# No machine-specific executable paths or credentials belong in this file.
+
+[run]
+name = "castellanismes_copilot"
+target_size = 100
+seed = 1
+pool_multiplier = 1.2
+
+[copilot]
+enabled = true
+workers = 4
+max_calls = 500       # cumulative CLI invocations, including retries; safe to raise on resume
+
+[[sources]]
+type = "llm"
+task = "castellanismes_verbals"
+backend = "writer"
+count = 150           # LLM candidate budget, not final dataset size
+batch_size = 15
+max_fix_attempts = 2
+
+[checks.languagetool]
+enabled = true
+url = "http://localhost:8081"
+
+[judge]
+enabled = true
+backend = "judge"
+mode = "filter"
+source_types = ["llm"]
+on_error = "reject"
+
+[backends.writer]
+type = "agent"
+model = "gpt-5.4"
+timeout = 120
+max_retries = 3       # total attempts per request
+
+[backends.judge]
+type = "agent"
+model = "claude-sonnet-5.5"
+timeout = 120
+max_retries = 3
+
+[min_share.phenomenon]
+tenir_que = 0.2
+hi_ha_que = 0.2
+donar_se_compte = 0.2

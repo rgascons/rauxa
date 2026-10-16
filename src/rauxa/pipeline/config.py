@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import shutil
 import tomllib
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Mapping, Optional
 
 
 @dataclass
@@ -141,9 +143,77 @@ class RunConfig:
         return Path(self.output_dir) / self.name
 
 
-def load_config(path: str | Path) -> RunConfig:
-    with open(path, "rb") as f:
-        raw = tomllib.load(f)
+@dataclass
+class CopilotConfig:
+    """Operational settings, deliberately not part of RunConfig or its fingerprint."""
+
+    enabled: bool = False
+    workers: int = 4
+    max_calls: Optional[int] = None
+    specified: frozenset[str] = field(default_factory=frozenset, repr=False)
+
+    def validate(self) -> None:
+        if type(self.enabled) is not bool:
+            raise ValueError("copilot.enabled must be a boolean")
+        for key in ("workers", "max_calls"):
+            value = getattr(self, key)
+            if key == "max_calls" and value is None:
+                continue
+            if type(value) is not int or value < 1:
+                raise ValueError(f"copilot.{key} must be a positive integer")
+
+
+@dataclass
+class CopilotSettings:
+    enabled: bool
+    workers: int
+    max_calls: Optional[int]
+    command: str
+    origins: dict[str, str]
+
+    def executable(self) -> str:
+        if not self.command.strip():
+            raise ValueError(f"empty Copilot executable from {self.origins['command']}")
+        executable = shutil.which(self.command)
+        if executable is None:
+            raise ValueError(f"Copilot executable {self.command!r} from {self.origins['command']} not found or not executable")
+        # Do not resolve symlinks: Node launchers can depend on the invoked path.
+        return os.path.abspath(executable)
+
+
+def resolve_copilot(
+    config: CopilotConfig, *, enabled: Optional[bool] = None, workers: Optional[int] = None,
+    max_calls: Optional[int] = None, command: Optional[str] = None,
+    environ: Optional[Mapping[str, str]] = None,
+) -> CopilotSettings:
+    config.validate()
+    origins = {}
+    values = {}
+    for key, override in (("enabled", enabled), ("workers", workers), ("max_calls", max_calls)):
+        values[key] = getattr(config, key) if override is None else override
+        flag = "--copilot" if key == "enabled" else f"--copilot-{key.replace('_', '-')}"
+        origins[key] = f"cli:{flag}" if override is not None else (
+            f"toml:copilot.{key}" if key in config.specified else "default"
+        )
+    if enabled is False:
+        origins["enabled"] = "cli:--no-copilot"
+    effective = CopilotConfig(**values)
+    effective.validate()
+    if effective.enabled and effective.max_calls is None:
+        raise ValueError("automated dispatch requires copilot.max_calls or --copilot-max-calls")
+    env = os.environ if environ is None else environ
+    if command is not None:
+        origins["command"] = "cli:--copilot-command"
+    elif "RAUXA_COPILOT_BIN" in env:
+        command = env["RAUXA_COPILOT_BIN"]
+        origins["command"] = "env:RAUXA_COPILOT_BIN"
+    else:
+        command = "copilot"
+        origins["command"] = "path"
+    return CopilotSettings(effective.enabled, effective.workers, effective.max_calls, command, origins)
+
+
+def _run_config(raw: dict[str, Any]) -> RunConfig:
     run = raw.get("run", {})
     checks_raw = dict(raw.get("checks", {}))
     lt = LanguageToolCheckConfig(**checks_raw.pop("languagetool", {}))
@@ -157,3 +227,24 @@ def load_config(path: str | Path) -> RunConfig:
     )
     config.validate()
     return config
+
+
+def load_settings(path: str | Path) -> tuple[RunConfig, CopilotConfig]:
+    with open(path, "rb") as f:
+        raw = tomllib.load(f)
+    options = raw.get("copilot", {})
+    if not isinstance(options, dict):
+        raise ValueError("[copilot] must be a TOML table")
+    unknown = set(options) - {"enabled", "workers", "max_calls"}
+    if unknown:
+        raise ValueError(
+            f"unknown [copilot] keys: {sorted(unknown)}; executable selection belongs in "
+            "--copilot-command or RAUXA_COPILOT_BIN, not TOML"
+        )
+    copilot = CopilotConfig(**options, specified=frozenset(options))
+    copilot.validate()
+    return _run_config(raw), copilot
+
+
+def load_config(path: str | Path) -> RunConfig:
+    return load_settings(path)[0]
