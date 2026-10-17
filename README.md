@@ -102,7 +102,7 @@ flowchart TD
 | `checks.jsonl`, `judge.jsonl` | Per-pair check results and judge verdicts (append-only, used to resume) |
 | `rejected.jsonl` | Pairs that were dropped, with the reason |
 | `manifest.json` | Config and fingerprint, counts, check failures, LanguageTool flag rate and misses per phenomenon, judge stats, shares, warnings |
-| `state.json` | Resume state. `rauxa run CONFIG --resume` continues an interrupted run; a changed config is refused |
+| `state.json` | Resume state. `rauxa run CONFIG --resume` continues an interrupted run; a changed dataset config is refused (operational `[copilot]` settings are excluded) |
 
 Every kept pair carries `metadata.qc` with how it was kept (`judge: not_used | passed | audited |
 not_sampled | error`, `kept_despite_judge_error`), its check results and LanguageTool details.
@@ -139,6 +139,21 @@ the same prompts as an API run. Open the repo in your agent and ask it to follow
 [AGENT_PIPELINE.md](AGENT_PIPELINE.md); the config is
 [configs/castellanismes_agent.toml](configs/castellanismes_agent.toml).
 
+For unattended generation inside WSL/Linux, use
+[configs/castellanismes_copilot.toml](configs/castellanismes_copilot.toml). Its `[copilot]`
+section enables a bounded pool of fresh Copilot CLI sessions and automatic resume:
+
+```bash
+rauxa run configs/castellanismes_copilot.toml
+rauxa run configs/castellanismes_copilot.toml --resume --copilot-max-calls 1000
+```
+
+Workers and the cumulative call cap live in TOML, with CLI overrides. Executable selection
+is machine-local (`--copilot-command`, `RAUXA_COPILOT_BIN`, or PATH). These operational
+settings do not affect the dataset fingerprint. Copilot subscription usage still applies.
+See [WSL setup and authentication](GETTING_STARTED.md#automated-copilot-cli-in-wsl) and the
+[`[copilot]` reference](CONFIG.md#copilot) before starting.
+
 ## Command reference
 
 ```bash
@@ -146,6 +161,7 @@ rauxa list                                                   # available tasks
 rauxa run configs/castellanismes_procedural.toml             # pipeline, no LLM
 rauxa run configs/castellanismes_full.toml                   # + LLM writer and judge
 rauxa run configs/castellanismes_agent.toml [--resume]       # LLM roles played by a coding agent
+rauxa run configs/castellanismes_copilot.toml [--resume]     # automatic Copilot CLI workers in WSL
 rauxa summary out/runs/castellanismes_procedural             # results of a run
 rauxa generate castellanismes_verbals --size 1000 -o out/raw.jsonl   # generator only
 rauxa review out/runs/castellanismes_procedural/dataset.jsonl out/labels.jsonl --n 100 --reviewer your-name

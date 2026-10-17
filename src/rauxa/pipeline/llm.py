@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from .config import BackendConfig
+from .storage import write_json, write_text
 
 
 class LLMError(RuntimeError):
@@ -39,6 +40,65 @@ _SETUP_STATUSES = {401: "the API key was rejected", 403: "the API key lacks perm
 
 class AwaitingAgent(Exception):
     """Raised by ``AgentFileBackend`` when a request has been written but not answered yet."""
+
+
+class AgentRequestFailed(LLMError):
+    """A dispatched request exhausted its attempts; never submit it again."""
+
+
+def agent_request(
+    backend: ChatBackend, messages: list[dict[str, str]], *, kind: str, key: str, count: int = 1,
+) -> dict[str, Any]:
+    if isinstance(backend, AgentFileBackend):
+        return backend.chat_request(messages, kind=kind, key=key, count=count)
+    return backend.chat_json(messages)
+
+
+def managed_request_id(record: dict[str, Any]) -> str:
+    payload = {key: record[key] for key in ("version", "backend", "model", "kind", "key", "count", "messages")}
+    return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:32]
+
+
+def validate_request(record: dict[str, Any], rid: str) -> None:
+    if not re.fullmatch(r"[a-f0-9]{32}", rid) or record.get("id") != rid or record.get("version") != 2:
+        raise ValueError(f"invalid or legacy agent request {rid!r}; use a fresh run for Copilot dispatch")
+    if record.get("kind") not in ("write", "fix", "judge"):
+        raise ValueError(f"unknown request kind for {rid}")
+    if any(not isinstance(record.get(k), str) or not record[k] for k in ("backend", "model", "key")):
+        raise ValueError(f"request {rid} needs explicit backend, model, and logical key")
+    if type(record.get("count")) is not int or record["count"] < 1:
+        raise ValueError(f"invalid request count for {rid}")
+    messages = record.get("messages")
+    if not isinstance(messages, list) or not messages or any(
+        not isinstance(m, dict) or m.get("role") not in ("system", "user") or not isinstance(m.get("content"), str)
+        for m in messages
+    ):
+        raise ValueError(f"invalid conversation for request {rid}")
+    if managed_request_id(record) != rid:
+        raise ValueError(f"request {rid} does not match its content")
+
+
+def validate_agent_answer(value: Any, kind: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise LLMError("answer must be a JSON object")
+    if kind == "judge":
+        keys = ("good_is_correct", "variants_are_correct", "bad_has_stated_error",
+                "bad_has_other_errors", "natural", "same_meaning")
+        if any(type(value.get(k)) is not bool for k in keys) or not isinstance(value.get("comment"), str):
+            raise LLMError("judge answer needs all six boolean verdicts and a string comment")
+    else:
+        pairs = value.get("items") if kind == "write" else [value]
+        if not isinstance(pairs, list) or not pairs:
+            raise LLMError("writer answer needs a nonempty items array")
+        for pair in pairs:
+            if not isinstance(pair, dict) or any(
+                not isinstance(pair.get(k), str) or not pair[k].strip() for k in ("good", "bad")
+            ):
+                raise LLMError("each pair needs nonempty good and bad strings")
+            alternatives = pair.get("alternatives")
+            if not isinstance(alternatives, list) or any(not isinstance(a, str) or not a.strip() for a in alternatives):
+                raise LLMError("alternatives must be an array of nonempty strings")
+    return value
 
 
 class ChatBackend(Protocol):
@@ -197,14 +257,17 @@ class AgentFileBackend:
     exactly the requests it is still missing.
     """
 
-    def __init__(self, config: BackendConfig, exchange_dir: Path):
+    def __init__(self, config: BackendConfig, exchange_dir: Path, *, name: str = "", version: int = 1):
         self.config = config
         self.model = config.model
+        self.name = name
+        self.version = version
         self.exchange_dir = exchange_dir
         self.requests = exchange_dir / "requests"
         self.responses = exchange_dir / "responses"
         self.done = self.requests / "done"
-        for d in (self.requests, self.responses, self.done):
+        self.failures = exchange_dir / "failures"
+        for d in (self.requests, self.responses, self.done, self.failures):
             d.mkdir(parents=True, exist_ok=True)
         self.pending: set[str] = set()
         self._lock = threading.Lock()
@@ -215,26 +278,42 @@ class AgentFileBackend:
         return hashlib.sha1(blob.encode()).hexdigest()[:16]
 
     def chat_json(self, messages: list[dict[str, str]]) -> dict[str, Any]:
-        rid = self.request_id(messages)
+        return self.chat_request(messages, kind="write", key=self.request_id(messages))
+
+    def _archive(self, rid: str) -> None:
+        for suffix in (".md", ".json"):
+            request = self.requests / f"{rid}{suffix}"
+            if request.exists():
+                os.replace(request, self.done / request.name)
+
+    def chat_request(self, messages: list[dict[str, str]], *, kind: str, key: str, count: int = 1) -> dict[str, Any]:
+        record = {"version": 2, "backend": self.name, "model": self.model,
+                  "kind": kind, "key": key, "count": count, "messages": messages}
+        rid = managed_request_id(record) if self.version == 2 else self.request_id(messages)
+        record["id"] = rid
         response = self.responses / f"{rid}.json"
         if response.exists():
             try:
                 value = parse_json_object(response.read_text(encoding="utf-8"))
             except (ValueError, LLMError) as e:
                 raise LLMError(f"agent response {response.name} is not a valid JSON object: {e}") from e
-            for suffix in (".md", ".json"):
-                request = self.requests / f"{rid}{suffix}"
-                if request.exists():
-                    os.replace(request, self.done / request.name)
+            self._archive(rid)
             return value
+        failure = self.failures / f"{rid}.json"
+        if failure.exists():
+            data = json.loads(failure.read_text(encoding="utf-8"))
+            if data.get("id") != rid:
+                raise ValueError(f"invalid failure record {failure}")
+            self._archive(rid)
+            raise AgentRequestFailed(f"agent request {rid} failed: {data['category']}: {data['message']}")
         md = self.requests / f"{rid}.md"
+        request_json = self.requests / f"{rid}.json"
+        if not request_json.exists():
+            write_json(request_json, record if self.version == 2 else {"id": rid, "messages": messages})
         if not md.exists():
             system = next((m["content"] for m in messages if m["role"] == "system"), "")
             user = "\n\n".join(m["content"] for m in messages if m["role"] == "user")
-            md.write_text(_REQUEST_TEMPLATE.format(rid=rid, system=system, user=user), encoding="utf-8")
-            (self.requests / f"{rid}.json").write_text(
-                json.dumps({"id": rid, "messages": messages}, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
+            write_text(md, _REQUEST_TEMPLATE.format(rid=rid, system=system, user=user))
         with self._lock:
             self.pending.add(rid)
         raise AwaitingAgent(rid)

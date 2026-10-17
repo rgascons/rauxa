@@ -11,7 +11,7 @@ from random import Random
 from typing import Any
 
 from ..formats import render
-from .llm import ChatBackend, LLMError
+from .llm import ChatBackend, LLMError, agent_request
 
 # ---------------------------------------------------------------------------------------
 # Writer
@@ -70,11 +70,12 @@ class Writer:
     def __init__(self, backend: ChatBackend):
         self.backend = backend
 
-    def write(self, info: dict[str, Any], examples: list[tuple[str, str]], n: int) -> list[WrittenPair]:
+    def write(self, info: dict[str, Any], examples: list[tuple[str, str]], n: int, *, key: str = "") -> list[WrittenPair]:
         example_text = "\n".join(f"- good: {g}\n  bad: {b}" for g, b in examples)
         user = _WRITE_USER.format(error=info["error"], correction=info["correction"], examples=example_text, n=n)
-        response = self.backend.chat_json(
-            [{"role": "system", "content": _WRITER_SYSTEM}, {"role": "user", "content": user}]
+        response = agent_request(
+            self.backend, [{"role": "system", "content": _WRITER_SYSTEM}, {"role": "user", "content": user}],
+            kind="write", key=key, count=n,
         )
         pairs = []
         for raw in response.get("items", []):
@@ -84,13 +85,14 @@ class Writer:
                 continue
         return pairs
 
-    def fix(self, info: dict[str, Any], pair: WrittenPair, problems: list[str]) -> WrittenPair:
+    def fix(self, info: dict[str, Any], pair: WrittenPair, problems: list[str], *, key: str = "") -> WrittenPair:
         item = json.dumps({"good": pair.good, "bad": pair.bad, "alternatives": pair.alternatives}, ensure_ascii=False)
         user = _FIX_USER.format(
             error=info["error"], correction=info["correction"], item=item, problems="; ".join(problems)
         )
         return _pair(
-            self.backend.chat_json([{"role": "system", "content": _WRITER_SYSTEM}, {"role": "user", "content": user}])
+            agent_request(self.backend, [{"role": "system", "content": _WRITER_SYSTEM}, {"role": "user", "content": user}],
+                          kind="fix", key=key)
         )
 
 
@@ -181,8 +183,9 @@ class Judge:
             variants=", ".join(f"«{v}»" for v in others) or "(none)",
             bad=meta["sentence_bad"],
         )
-        verdict = self.backend.chat_json(
-            [{"role": "system", "content": _JUDGE_SYSTEM}, {"role": "user", "content": user}]
+        verdict = agent_request(
+            self.backend, [{"role": "system", "content": _JUDGE_SYSTEM}, {"role": "user", "content": user}],
+            kind="judge", key=f"judge:{meta.get('item_id', '')}",
         )
         keys = (*JUDGE_QUESTIONS, "bad_has_other_errors")
         cleaned = {k: verdict.get(k) for k in keys}

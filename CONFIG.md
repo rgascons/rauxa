@@ -14,6 +14,7 @@ Unknown keys are an error: the run stops with a `TypeError: ... unexpected keywo
 - [`[checks]`](#checks)
 - [`[judge]`](#judge)
 - [`[backends.<name>]`](#backendsname)
+- [`[copilot]`](#copilot)
 - [`[min_share.<field>]`](#min_sharefield)
 - [Changing a config and `--resume`](#changing-a-config-and---resume)
 
@@ -177,15 +178,15 @@ are actually referenced need to be configured.
 | Key | Default | Applies to | Meaning |
 |---|---|---|---|
 | `type` | `"openai"` | | `"openai"`, `"anthropic"` or `"agent"` (below) |
-| `model` | `""` | all | Model id. Required for `openai` and `anthropic`. For `agent`, the model the agent runs on: recorded and used for family warnings |
+| `model` | `""` | all | Model id. Required for `openai`, `anthropic`, and automated Copilot dispatch. For manual `agent`, recorded and used for family warnings |
 | `base_url` | `""` | `openai`, `anthropic` | Endpoint. Required for `openai` (e.g. `"http://localhost:8000/v1"`); optional for `anthropic` |
 | `api_key_env` | unset | `openai`, `anthropic` | Name of the environment variable holding the key (not the key itself). Unset: `openai` sends no key (fine for local servers); `anthropic` uses the SDK's own lookup (`ANTHROPIC_API_KEY`, or an `ant auth login` profile) |
 | `temperature` | unset | `openai` | Sampling temperature. Leave unset for models that reject it (e.g. reasoning models) |
 | `json_mode` | `true` | `openai` | Send `response_format = {"type": "json_object"}`. Turn off for servers that don't support it |
 | `effort` | unset | `anthropic` | Reasoning effort: `low`, `medium`, `high`, `xhigh`, `max`. Unset uses the model's default. Higher is slower and costs more |
 | `fallbacks` | `true` | `anthropic` | If the model declines a request, let the API retry it on another model (supported models only) |
-| `timeout` | `120.0` | `openai`, `anthropic` | Seconds per call |
-| `max_retries` | `3` | `openai`, `anthropic` | Attempts per call |
+| `timeout` | `120.0` | `openai`, `anthropic`, automated `agent` | Seconds per call; positive and finite for Copilot |
+| `max_retries` | `3` | `openai`, `anthropic`, automated `agent` | For OpenAI/Copilot: total attempts per call, at least 1. Anthropic passes this to its SDK as its retry limit. Ignored for manual file responses |
 
 **Types:**
 
@@ -202,6 +203,63 @@ single failed call is recorded and the run carries on.
 
 The manifest warns when the judge is from the same model family as a writer (it may favour
 pairs written in its own style), and when `evaluated_models` overlap with either.
+
+## `[copilot]`
+
+Automatically answer file-backed `agent` requests using fresh, tools-disabled GitHub Copilot
+CLI sessions, entirely inside WSL/Linux. The pipeline runs, dispatches pending requests, and
+resumes until finished or paused by its call cap. Existing API backends still work normally.
+
+```toml
+[copilot]
+enabled = true
+workers = 4
+max_calls = 500
+```
+
+| Key | Default | CLI override | Meaning |
+|---|---|---|---|
+| `enabled` | `false` | `--copilot` / `--no-copilot` | Enable automation; requires at least one referenced `type = "agent"` backend |
+| `workers` | `4` | `--copilot-workers N` | Positive integer: maximum concurrent CLI calls across writers, repairs, and judges |
+| `max_calls` | unset | `--copilot-max-calls N` | Required positive integer when enabled: cumulative invocation cap for the whole run, including retries |
+
+Precedence is **explicit CLI flag, then explicit TOML value, then default**. Without this
+section, manual/API behavior is unchanged. `--no-copilot` temporarily restores manual
+request answering without changing the file. Unknown `[copilot]` keys are errors.
+
+There is deliberately **no executable key in TOML**. Executable resolution is:
+`--copilot-command BIN`, then `RAUXA_COPILOT_BIN`, then `copilot` on PATH. The chosen value
+is one executable name/path, not a shell command with arguments. An invalid explicit choice
+is an error, not permission to fall back. The selected binary must pass version and
+automation-capability preflight.
+
+Dispatcher settings are parsed separately from `RunConfig` and **never enter its fingerprint**.
+Changing workers, the call cap, or executable does not prevent `--resume`. The cap is not
+reset on resume: raise it to allow more work. A cap at or below recorded usage launches no
+additional calls. Dataset/source/model settings, including backend timeout/retry settings,
+remain fingerprinted.
+
+Each invocation records effective settings and their sources (`cli`, `toml`, `default`,
+`env:RAUXA_COPILOT_BIN`, or `path`), the resolved binary and version in
+`dispatcher/events.jsonl`. `dispatcher/status.json` and the final manifest's `dispatcher`
+section expose current settings and counters; `rauxa summary` displays them even while
+the run is waiting. This provenance is outside the fingerprint.
+
+Calls are reserved durably before launch. A crash can leave a reservation without a
+confirmed answer; it still consumes budget. This is not an exactly-once billing guarantee,
+nor a token, credit, or currency cap. A valid response is saved atomically and reused on
+resume. Budget exhaustion returns exit 3, preserving unfinished requests rather than failing
+them. Ctrl+C/SIGTERM returns 130; setup/coordinator errors return 1.
+
+After `max_retries` total attempts, an individual failure is recorded in
+`agent_exchange/failures/` and processing continues. A failed writer batch consumes its
+requested candidate budget once; a failed repair is abandoned; a failed judge uses
+`judge.on_error`. Recognized authentication/model/permission errors stop the run instead.
+The dataset may be incomplete, or complete with recorded failures if enough other pairs
+survive. Automatic linguistic checks and a negative judge verdict are not transport failures.
+
+See [the WSL setup guide](GETTING_STARTED.md#automated-copilot-cli-in-wsl) for authentication,
+isolation requirements, and an example run.
 
 ## `[min_share.<field>]`
 
@@ -228,6 +286,7 @@ gec = 0.2
 ## Changing a config and `--resume`
 
 `rauxa run CONFIG --resume` continues an interrupted or waiting run from its run folder. The
-config is fingerprinted, and **any change** refuses the resume, including keys that are ignored
+dataset config is fingerprinted, and **any dataset configuration change** refuses the resume, including keys that are ignored
 (such as `count` on a procedural source) and reordering sources. To change the config, use a new
-`name` or delete the old run folder.
+`name` or delete the old run folder. The operational `[copilot]` section and its CLI/environment
+overrides are excluded from this fingerprint and can change on resume.

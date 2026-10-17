@@ -53,6 +53,7 @@ from .llm import (
     model_family,
 )
 from .selection import item_id, select, share_report
+from .storage import RunLock, read_records, write_json
 
 _HUGE = 2**31 - 1
 
@@ -78,16 +79,11 @@ def _append(path: Path, record: dict[str, Any]) -> None:
 
 
 def _read(path: Path) -> list[dict[str, Any]]:
-    if not path.exists():
-        return []
-    with path.open(encoding="utf-8") as f:
-        return [json.loads(line) for line in f if line.strip()]
+    return list(read_records(path))
 
 
 def _write_json(path: Path, data: Any) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(tmp, path)
+    write_json(path, data)
 
 
 def _write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
@@ -95,6 +91,8 @@ def _write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
     with tmp.open("w", encoding="utf-8") as f:
         for r in records:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
     os.replace(tmp, path)
 
 
@@ -108,7 +106,32 @@ class Pipeline:
         backends: Optional[dict[str, ChatBackend]] = None,
         log: Optional[Callable[[str], None]] = None,
         progress: Optional[Progress] = None,
+        run_lock: Optional[RunLock] = None,
     ):
+        self._owns_lock = run_lock is None
+        self._run_lock = run_lock or RunLock(config.run_dir())
+        try:
+            if self._owns_lock:
+                self._run_lock.__enter__()
+            elif self._run_lock.directory != config.run_dir().resolve():
+                raise PipelineError("run lock belongs to another directory")
+            self._run_lock.fileno()
+            self._initialize(config, resume=resume, lt_client=lt_client, backends=backends, log=log, progress=progress)
+        except BaseException:
+            self.close()
+            raise
+
+    def close(self) -> None:
+        if self._owns_lock:
+            self._run_lock.__exit__()
+
+    def __enter__(self) -> Pipeline:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+    def _initialize(self, config, *, resume, lt_client, backends, log, progress) -> None:
         config.validate()
         self.cfg = config
         self.dir = config.run_dir()
@@ -164,6 +187,7 @@ class Pipeline:
                 "sources": {str(i): {"next_index": 0, "requested": 0, "exhausted": False} for i in range(len(self.cfg.sources))},
                 "duplicates_skipped": 0,
                 "writer_errors": 0,
+                "agent_protocol": 2,
                 "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             }
             self._save_state()
@@ -174,6 +198,12 @@ class Pipeline:
         self.judge_records = {r["item_id"]: r for r in _read(self.paths["judge.jsonl"])}
 
     def _save_state(self) -> None:
+        # Make the records durable before a checkpoint can declare them consumed.
+        for name in ("candidates.jsonl", "checks.jsonl", "judge.jsonl"):
+            path = self.paths[name]
+            if path.exists():
+                with path.open("rb") as stream:
+                    os.fsync(stream.fileno())
         _write_json(self.paths["state.json"], self.state)
 
     def _build_backends(self) -> dict[str, ChatBackend]:
@@ -184,7 +214,9 @@ class Pipeline:
         for name in needed:
             config = self.cfg.backends[name]
             if config.type == "agent":
-                backends[name] = AgentFileBackend(config, self.dir / "agent_exchange")
+                backends[name] = AgentFileBackend(
+                    config, self.dir / "agent_exchange", name=name, version=self.state.get("agent_protocol", 1),
+                )
             elif config.type == "anthropic":
                 backends[name] = AnthropicBackend(config)
             else:
@@ -257,6 +289,8 @@ class Pipeline:
         )
 
     def _make_llm(self, i: int, src: SourceConfig, n: int) -> list[dict[str, Any]]:
+        if isinstance(self.backends[src.backend], AgentFileBackend) and self.state.get("agent_protocol") == 2:
+            return self._make_agent_llm(i, src)
         st = self.state["sources"][str(i)]
         n = min(n, src.count - st["requested"])
         phenomena = src.phenomena or list(self.info[src.task])
@@ -271,7 +305,7 @@ class Pipeline:
             k = min(src.batch_size, n)
             try:
                 examples = self._examples(src.task, phenomenon, batch_index)
-                pairs = self.writers[i].write(self.info[src.task][phenomenon], examples, k)
+                pairs = self.writers[i].write(self.info[src.task][phenomenon], examples, k, key=f"write:{i}:{batch_index}")
                 consecutive_errors = 0
             except AwaitingAgent:
                 waiting_offset += k
@@ -291,6 +325,42 @@ class Pipeline:
                     out.append(added)
         if st["requested"] >= src.count:
             st["exhausted"] = True
+        return out
+
+    def _make_agent_llm(self, i: int, src: SourceConfig) -> list[dict[str, Any]]:
+        if src.batch_size < 1 or src.count < 0:
+            raise PipelineError("agent sources need a positive batch_size and nonnegative count")
+        st = self.state["sources"][str(i)]
+        batches = st.setdefault("batches", {})
+        phenomena = src.phenomena or list(self.info[src.task])
+        out = []
+        for batch, start in enumerate(range(0, src.count, src.batch_size)):
+            key = str(batch)
+            if key in batches:
+                continue
+            k = min(src.batch_size, src.count - start)
+            phenomenon = phenomena[batch % len(phenomena)]
+            try:
+                pairs = self.writers[i].write(
+                    self.info[src.task][phenomenon], self._examples(src.task, phenomenon, batch), k,
+                    key=f"write:{i}:{batch}",
+                )
+            except AwaitingAgent:
+                continue
+            except LLMError as e:
+                self.log(f"LLM writer {i}, batch {batch}: {e}")
+                self.state["writer_errors"] += 1
+                batches[key] = {"status": "failed", "count": k}
+            else:
+                for pair in pairs:
+                    added = self._add_candidate(self._llm_entry(i, src, phenomenon, pair), i)
+                    if added is not None:
+                        out.append(added)
+                batches[key] = {"status": "succeeded", "count": k}
+            st["requested"] += k
+            self._save_state()
+            self.progress.update("reading agent batches", st["requested"], src.count)
+        st["exhausted"] = st["requested"] >= src.count
         return out
 
     def _make_from_llm_sources(self) -> list[dict[str, Any]]:
@@ -370,12 +440,15 @@ class Pipeline:
                 pair = WrittenPair(meta["sentence_good"], meta["sentence_bad"],
                                    [v for v in meta["correct_variants"] if v != meta["sentence_good"]])
                 try:
-                    fixed = self.writers[i].fix(self.info[src.task][meta["phenomenon"]], pair, problems)
+                    fixed = self.writers[i].fix(
+                        self.info[src.task][meta["phenomenon"]], pair, problems, key=f"fix:{i}:{iid}",
+                    )
                 except AwaitingAgent:
                     continue
                 except LLMError as e:
                     self.log(f"fix attempt failed: {e}")
                     given_up.append(iid)
+                    self._save_state()
                     continue
                 candidate = self._add_candidate(self._llm_entry(i, src, meta["phenomenon"], fixed, revision_of=iid), i)
                 if candidate is None:
@@ -465,10 +538,12 @@ class Pipeline:
     # -- main loop ---------------------------------------------------------------------
 
     def run(self) -> RunResult:
+        self._run_lock.fileno()
         try:
             return self._run()
         finally:
             self.progress.clear()
+            self.close()
 
     def _run(self) -> RunResult:
         goal = math.ceil(self.cfg.target_size * self.cfg.pool_multiplier)
@@ -600,7 +675,7 @@ class Pipeline:
         if status == "incomplete":
             warnings.append("dataset is incomplete: too few pairs, or a minimum share not met")
 
-        return {
+        manifest = {
             "rauxa_version": __version__,
             "config": asdict(self.cfg),
             "fingerprint": self.cfg.fingerprint(),
@@ -637,3 +712,7 @@ class Pipeline:
             "shares": shares,
             "warnings": warnings,
         }
+        dispatcher_status = self.dir / "dispatcher" / "status.json"
+        if dispatcher_status.exists():
+            manifest["dispatcher"] = json.loads(dispatcher_status.read_text(encoding="utf-8"))
+        return manifest
