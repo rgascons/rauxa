@@ -3,13 +3,14 @@
 # No machine-specific executable paths or credentials belong in this file.
 
 [run]
-name = "castellanismes_copilot_10k"
+name = "castellanismes_runners_10k"
 target_size = 10000
 seed = 1
 pool_multiplier = 1.2
 
-[copilot]
-workers = 4
+[runners.copilot]
+enabled = true
+concurrency = 4
 max_calls = 18000      # cumulative CLI invocations, including retries; safe to raise on resume
 
 [[sources]]

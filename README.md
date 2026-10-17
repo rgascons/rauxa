@@ -102,7 +102,7 @@ flowchart TD
 | `checks.jsonl`, `judge.jsonl` | Per-pair check results and judge verdicts (append-only, used to resume) |
 | `rejected.jsonl` | Pairs that were dropped, with the reason |
 | `manifest.json` | Config and fingerprint, counts, check failures, LanguageTool flag rate and misses per phenomenon, judge stats, shares, warnings |
-| `state.json` | Resume state. `rauxa run CONFIG --resume` continues an interrupted run; a changed dataset config is refused (operational `[copilot]` settings are excluded) |
+| `state.json` | Resume state. `rauxa run CONFIG --resume` continues an interrupted run; a changed dataset config is refused (operational `[runners.copilot]` settings are excluded) |
 
 Every kept pair carries `metadata.qc` with how it was kept (`judge: not_used | passed | audited |
 not_sampled | error`, `kept_despite_judge_error`), its check results and LanguageTool details.
@@ -140,25 +140,27 @@ the same prompts as an API run. Open the repo in your agent and ask it to follow
 [configs/castellanismes_agent.toml](configs/castellanismes_agent.toml).
 
 For unattended generation inside WSL/Linux, use
-[configs/castellanismes_copilot.toml](configs/castellanismes_copilot.toml). Its `[copilot]`
-section enables a bounded pool of fresh Copilot CLI sessions and automatic resume:
+[configs/castellanismes_runners.toml](configs/castellanismes_runners.toml). Its `[runners.copilot]`
+section explicitly sets `enabled = true` for a bounded pool of fresh Copilot CLI sessions
+and automatic resume:
 
 ```bash
-rauxa run configs/castellanismes_copilot.toml
+rauxa run configs/castellanismes_runners.toml
 # If the call cap is reached, increase max_calls in TOML before resuming.
-rauxa run configs/castellanismes_copilot.toml --resume
+rauxa run configs/castellanismes_runners.toml --resume
 ```
 
-Declaring `[copilot]` enables automation; workers and the cumulative call cap live only in
-TOML. Executable selection is machine-local (`RAUXA_COPILOT_BIN`, then PATH). These operational
+Automation requires `enabled = true` in `[runners.copilot]` to avoid accidental costs; section
+presence alone does not enable it. Concurrency and the cumulative call cap live only in TOML.
+Executable selection is machine-local (`RAUXA_COPILOT_BIN`, then PATH). These operational
 settings do not affect the dataset fingerprint. Copilot subscription usage still applies.
 See [WSL setup and authentication](GETTING_STARTED.md#automated-copilot-cli-in-wsl) and the
-[`[copilot]` reference](CONFIG.md#copilot) before starting.
+[`[runners.copilot]` reference](CONFIG.md#runnerscopilot) before starting.
 
 The dispatcher uses the `CliRunner` protocol in `rauxa.pipeline.cli_runner`: adapters expose
 `executable`, `version`, `preflight()`, and `run(...) -> AttemptResult`. Scheduling, budgets,
 and resume stay in the dispatcher; CLI permissions, authentication, parsing, and process
-cleanup stay in the adapter. Copilot remains the default and only configured provider.
+cleanup stay in the adapter. Copilot remains the only supported runner.
 The internal `Dispatcher(..., runner_factory=...)` extension point receives the held run-lock
 file descriptor and returns a runner. It does not add provider selection or change request
 identities; do not switch adapter implementations when resuming an existing run.
@@ -170,7 +172,7 @@ rauxa list                                                   # available tasks
 rauxa run configs/castellanismes_procedural.toml             # pipeline, no LLM
 rauxa run configs/castellanismes_full.toml                   # + LLM writer and judge
 rauxa run configs/castellanismes_agent.toml [--resume]       # LLM roles played by a coding agent
-rauxa run configs/castellanismes_copilot.toml [--resume]     # automatic Copilot CLI workers in WSL
+rauxa run configs/castellanismes_runners.toml [--resume]     # automatic Copilot CLI workers in WSL
 rauxa summary out/runs/castellanismes_procedural             # results of a run
 rauxa generate castellanismes_verbals --size 1000 -o out/raw.jsonl   # generator only
 rauxa review out/runs/castellanismes_procedural/dataset.jsonl out/labels.jsonl --n 100 --reviewer your-name

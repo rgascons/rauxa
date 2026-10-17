@@ -119,8 +119,10 @@ def _dispatcher_summary(dispatcher: dict) -> None:
     print(f"Copilot:  {dispatcher['status']}; {dispatcher['calls_used']}/{settings['max_calls']} calls reserved, "
           f"{dispatcher['completed']} responses, {dispatcher['failed']} failed requests")
     print(f"CLI:      {dispatcher['executable'] or 'not invoked'} ({dispatcher['cli_version'] or 'preflight not completed'})")
-    for key in ("enabled", "workers", "max_calls", "command"):
-        print(f"  {key}: {settings[key]} ({settings['origins'][key]})")
+    for key in ("enabled", "concurrency", "max_calls", "command"):
+        # Older runs stored the concurrency limit as "workers".
+        stored_key = "workers" if key == "concurrency" and key not in settings else key
+        print(f"  {key}: {settings[stored_key]} ({settings['origins'][stored_key]})")
 
 
 def cmd_summary(args: argparse.Namespace) -> int:

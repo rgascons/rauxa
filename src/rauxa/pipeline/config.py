@@ -145,29 +145,29 @@ class RunConfig:
 
 @dataclass
 class CopilotConfig:
-    """Operational settings, deliberately not part of RunConfig or its fingerprint."""
+    """Settings from [runners.copilot], excluded from RunConfig and its fingerprint."""
 
     enabled: bool = False
-    workers: int = 4
+    concurrency: int = 4
     max_calls: Optional[int] = None
     specified: frozenset[str] = field(default_factory=frozenset, repr=False)
     section_present: bool = field(default=False, repr=False)
 
     def validate(self) -> None:
         if type(self.enabled) is not bool:
-            raise ValueError("copilot.enabled must be a boolean")
-        for key in ("workers", "max_calls"):
+            raise ValueError("runners.copilot.enabled must be a boolean")
+        for key in ("concurrency", "max_calls"):
             value = getattr(self, key)
             if key == "max_calls" and value is None:
                 continue
             if type(value) is not int or value < 1:
-                raise ValueError(f"copilot.{key} must be a positive integer")
+                raise ValueError(f"runners.copilot.{key} must be a positive integer")
 
 
 @dataclass
 class CopilotSettings:
     enabled: bool
-    workers: int
+    concurrency: int
     max_calls: Optional[int]
     command: str
     origins: dict[str, str]
@@ -187,13 +187,11 @@ def resolve_copilot(
 ) -> CopilotSettings:
     config.validate()
     origins = {
-        key: f"toml:copilot.{key}" if key in config.specified else "default"
-        for key in ("enabled", "workers", "max_calls")
+        key: f"toml:runners.copilot.{key}" if key in config.specified else "default"
+        for key in ("enabled", "concurrency", "max_calls")
     }
-    if config.section_present and "enabled" not in config.specified:
-        origins["enabled"] = "toml:copilot"
     if config.enabled and config.max_calls is None:
-        raise ValueError("automated dispatch requires copilot.max_calls")
+        raise ValueError("automated dispatch requires runners.copilot.max_calls")
     env = os.environ if environ is None else environ
     if "RAUXA_COPILOT_BIN" in env:
         command = env["RAUXA_COPILOT_BIN"]
@@ -201,7 +199,7 @@ def resolve_copilot(
     else:
         command = "copilot"
         origins["command"] = "path"
-    return CopilotSettings(config.enabled, config.workers, config.max_calls, command, origins)
+    return CopilotSettings(config.enabled, config.concurrency, config.max_calls, command, origins)
 
 
 def _run_config(raw: dict[str, Any]) -> RunConfig:
@@ -223,19 +221,30 @@ def _run_config(raw: dict[str, Any]) -> RunConfig:
 def load_settings(path: str | Path) -> tuple[RunConfig, CopilotConfig]:
     with open(path, "rb") as f:
         raw = tomllib.load(f)
-    options = raw.get("copilot", {})
+    if "copilot" in raw:
+        raise ValueError(
+            "[copilot] has moved to [runners.copilot]; set enabled = true explicitly "
+            "to allow automated calls that can incur costs"
+        )
+    runners = raw.get("runners", {})
+    if not isinstance(runners, dict):
+        raise ValueError("[runners] must be a TOML table")
+    unknown_runners = set(runners) - {"copilot"}
+    if unknown_runners:
+        raise ValueError(f"unknown [runners] keys: {sorted(unknown_runners)}")
+    options = runners.get("copilot", {})
     if not isinstance(options, dict):
-        raise ValueError("[copilot] must be a TOML table")
-    unknown = set(options) - {"enabled", "workers", "max_calls"}
+        raise ValueError("[runners.copilot] must be a TOML table")
+    if "workers" in options:
+        raise ValueError("runners.copilot.workers has been renamed to runners.copilot.concurrency")
+    unknown = set(options) - {"enabled", "concurrency", "max_calls"}
     if unknown:
         raise ValueError(
-            f"unknown [copilot] keys: {sorted(unknown)}; executable selection belongs in "
+            f"unknown [runners.copilot] keys: {sorted(unknown)}; executable selection belongs in "
             "RAUXA_COPILOT_BIN, not TOML"
         )
-    section_present = "copilot" in raw
     copilot = CopilotConfig(
-        **{"enabled": section_present, **options},
-        specified=frozenset(options), section_present=section_present,
+        **options, specified=frozenset(options), section_present="copilot" in runners,
     )
     copilot.validate()
     return _run_config(raw), copilot
