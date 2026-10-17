@@ -140,14 +140,14 @@ the same prompts as an API run. Open the repo in your agent and ask it to follow
 [configs/castellanismes_agent.toml](configs/castellanismes_agent.toml).
 
 For unattended generation inside WSL/Linux, use
-[configs/castellanismes_runners.toml](configs/castellanismes_runners.toml). Its `[runners.copilot]`
+[configs/castellanismes_runners_llm_only.toml](configs/castellanismes_runners_llm_only.toml). Its `[runners.copilot]`
 section explicitly sets `enabled = true` for a bounded pool of fresh Copilot CLI sessions
 and automatic resume:
 
 ```bash
-rauxa run configs/castellanismes_runners.toml
+rauxa run configs/castellanismes_runners_llm_only.toml
 # If the call cap is reached, increase max_calls in TOML before resuming.
-rauxa run configs/castellanismes_runners.toml --resume
+rauxa run configs/castellanismes_runners_llm_only.toml --resume
 ```
 
 Automation requires `enabled = true` in `[runners.copilot]` to avoid accidental costs; section
@@ -172,7 +172,7 @@ rauxa list                                                   # available tasks
 rauxa run configs/castellanismes_procedural.toml             # pipeline, no LLM
 rauxa run configs/castellanismes_full.toml                   # + LLM writer and judge
 rauxa run configs/castellanismes_agent.toml [--resume]       # LLM roles played by a coding agent
-rauxa run configs/castellanismes_runners.toml [--resume]     # automatic Copilot CLI workers in WSL
+rauxa run configs/castellanismes_runners_llm_only.toml [--resume]     # automatic Copilot CLI workers in WSL
 rauxa summary out/runs/castellanismes_procedural             # results of a run
 rauxa generate castellanismes_verbals --size 1000 -o out/raw.jsonl   # generator only
 rauxa review out/runs/castellanismes_procedural/dataset.jsonl out/labels.jsonl --n 100 --reviewer your-name
