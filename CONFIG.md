@@ -5,8 +5,8 @@ how they are checked, whether an LLM judges them, and how large and balanced the
 This page lists every key. For a guided first run see [GETTING_STARTED.md](GETTING_STARTED.md);
 for working examples see [configs/](configs/).
 
-Unknown keys are an error: the run stops with a `TypeError: ... unexpected keyword argument
-'<key>'`, so a typo never silently falls back to a default.
+Unknown setting keys are an error: the run stops with a `TypeError` or `ValueError`, so a
+typo never silently falls back to a default.
 
 - [How a run uses the config](#how-a-run-uses-the-config)
 - [`[run]`](#run)
@@ -14,7 +14,7 @@ Unknown keys are an error: the run stops with a `TypeError: ... unexpected keywo
 - [`[checks]`](#checks)
 - [`[judge]`](#judge)
 - [`[backends.<name>]`](#backendsname)
-- [`[copilot]`](#copilot)
+- [`[runners.copilot]`](#runnerscopilot)
 - [`[min_share.<field>]`](#min_sharefield)
 - [Changing a config and `--resume`](#changing-a-config-and---resume)
 
@@ -204,30 +204,35 @@ single failed call is recorded and the run carries on.
 The manifest warns when the judge is from the same model family as a writer (it may favour
 pairs written in its own style), and when `evaluated_models` overlap with either.
 
-## `[copilot]`
+## `[runners.copilot]`
 
 Automatically answer file-backed `agent` requests using fresh, tools-disabled GitHub Copilot
 CLI sessions, entirely inside WSL/Linux. The pipeline runs, dispatches pending requests, and
 resumes until finished or paused by its call cap. Existing API backends still work normally.
 
 ```toml
-[copilot]
+[runners.copilot]
+enabled = true
 workers = 4
 max_calls = 500
 ```
 
 | Key | Default | Meaning |
 |---|---|---|
-| `enabled` | `true` when `[copilot]` is present, otherwise `false` | Optional; set `false` to keep the section configured but disabled. Automation requires at least one referenced `type = "agent"` backend |
+| `enabled` | `false` | Explicitly set `true` to allow automated calls, which can incur costs. Automation requires at least one referenced `type = "agent"` backend |
 | `workers` | `4` | Positive integer: maximum concurrent CLI calls across writers, repairs, and judges |
 | `max_calls` | unset | Required positive integer when enabled: cumulative invocation cap for the whole run, including retries |
 
-Dispatcher settings live **only in TOML**, with no Copilot-specific command-line overrides.
-Declaring `[copilot]` enables automation without needing `enabled = true`. Even an empty
-section enables it, so `max_calls` must be supplied in TOML unless automation is explicitly
-disabled. Without this section, manual/API behavior is unchanged.
-`enabled = false` disables automation while retaining its settings.
-Existing explicit `enabled = true` settings remain valid. Unknown `[copilot]` keys are errors.
+Runner settings live **only in TOML**, with no Copilot-specific command-line overrides.
+Declaring `[runners.copilot]` alone does not enable automation: `enabled = true` is required
+to avoid accidentally launching calls that can incur costs. With no section, no `enabled`
+key, or `enabled = false`, manual/API behavior is unchanged and no Copilot CLI is launched.
+`max_calls` is required only when enabled.
+
+**Migration:** rename the former `[copilot]` section to `[runners.copilot]` and explicitly
+add `enabled = true` if you want automated execution. The old section is rejected with a
+migration error, not silently ignored or treated as an alias. Unknown runner names and
+unknown `[runners.copilot]` keys are also errors.
 
 There is deliberately **no executable key in TOML**. Executable resolution is:
 `RAUXA_COPILOT_BIN`, then `copilot` on PATH. The chosen value
@@ -235,9 +240,10 @@ is one executable name/path, not a shell command with arguments. An invalid expl
 is an error, not permission to fall back. The selected binary must pass version and
 automation-capability preflight.
 
-Dispatcher settings are parsed separately from `RunConfig` and **never enter its fingerprint**.
-Changing workers, the call cap, or executable does not prevent `--resume`. The cap is not
-reset on resume: raise it to allow more work. A cap at or below recorded usage launches no
+Runner settings are parsed separately from `RunConfig` and **never enter its fingerprint**.
+Migrating the section or changing `enabled`, workers, the call cap, or executable does not
+prevent `--resume`. The cap is not reset on resume: raise it to allow more work. A cap at or
+below recorded usage launches no
 additional calls. Dataset/source/model settings, including backend timeout/retry settings,
 remain fingerprinted.
 
@@ -246,8 +252,8 @@ Each invocation records effective settings and their sources (`toml`, `default`,
 `dispatcher/events.jsonl`. `dispatcher/status.json` and the final manifest's `dispatcher`
 section expose current settings and counters; `rauxa summary` displays them even while
 the run is waiting. This provenance is outside the fingerprint.
-Implicit enabling from section presence is recorded as `toml:copilot`, distinct from
-an explicit `toml:copilot.enabled` value.
+Explicit settings use origins such as `toml:runners.copilot.enabled`. An omitted `enabled`
+key is recorded as `default`, even when the runner section is present.
 
 Calls are reserved durably before launch. A crash can leave a reservation without a
 confirmed answer; it still consumes budget. This is not an exactly-once billing guarantee,
@@ -292,5 +298,5 @@ gec = 0.2
 `rauxa run CONFIG --resume` continues an interrupted or waiting run from its run folder. The
 dataset config is fingerprinted, and **any dataset configuration change** refuses the resume, including keys that are ignored
 (such as `count` on a procedural source) and reordering sources. To change the config, use a new
-`name` or delete the old run folder. The operational `[copilot]` section and executable
+`name` or delete the old run folder. The operational `[runners.copilot]` section and executable
 environment selection are excluded from this fingerprint and can change on resume.

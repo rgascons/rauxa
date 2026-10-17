@@ -70,7 +70,7 @@ class TestCopilotDispatch(unittest.TestCase):
         history = list(read_records(cfg.run_dir() / "dispatcher" / "events.jsonl"))
         settings = [r["settings"] for r in history if r["event"] == "settings"]
         self.assertEqual([r["max_calls"] for r in settings], [2, 8])
-        self.assertEqual(settings[-1]["origins"]["workers"], "toml:copilot.workers")
+        self.assertEqual(settings[-1]["origins"]["workers"], "toml:runners.copilot.workers")
         again = Dispatcher(cfg, self.settings(8), resume=True, log=lambda _: None).run()
         self.assertEqual(again.status, "complete")
         self.assertEqual(len(self.logs()), 8)
@@ -147,7 +147,8 @@ enabled = false
 [backends.writer]
 type = "agent"
 model = "test-model"
-[copilot]
+[runners.copilot]
+enabled = true
 workers = 2
 max_calls = 1
 ''', encoding="utf-8")
@@ -163,26 +164,28 @@ max_calls = 1
             self.assertEqual(main(["run", str(config), "--resume"]), 0)
             self.assertEqual(main(["summary", str(self.root / "cli"), "--samples", "0"]), 0)
         self.assertIn("env:RAUXA_COPILOT_BIN", output.getvalue())
-        self.assertIn("toml:copilot.max_calls", output.getvalue())
+        self.assertIn("toml:runners.copilot.max_calls", output.getvalue())
         manifest = json.loads((self.root / "cli" / "manifest.json").read_text())
         self.assertTrue(manifest["dispatcher"]["settings"]["enabled"])
-        self.assertEqual(manifest["dispatcher"]["settings"]["origins"]["enabled"], "toml:copilot")
+        self.assertEqual(manifest["dispatcher"]["settings"]["origins"]["enabled"], "toml:runners.copilot.enabled")
         history = list(read_records(self.root / "cli" / "dispatcher" / "events.jsonl"))
         self.assertEqual([r["settings"]["max_calls"] for r in history if r["event"] == "settings"], [1, 2])
 
     def test_disabled_copilot_and_dataset_fingerprint(self):
         config = self.cli_config()
-        config.write_text(config.read_text().replace("[copilot]\n", "[copilot]\nenabled = false\n"))
+        config.write_text(
+            config.read_text().replace("[runners.copilot]\nenabled = true", "[runners.copilot]\nenabled = false")
+        )
         output = StringIO()
         with redirect_stdout(output), redirect_stderr(output):
             self.assertEqual(main(["run", str(config)]), 3)
             self.assertFalse(self.events.exists())
             disabled = json.loads((self.root / "cli" / "dispatcher" / "status.json").read_text())
             self.assertEqual(disabled["status"], "disabled")
-            self.assertEqual(disabled["settings"]["origins"]["enabled"], "toml:copilot.enabled")
+            self.assertEqual(disabled["settings"]["origins"]["enabled"], "toml:runners.copilot.enabled")
             before = json.loads((self.root / "cli" / "state.json").read_text())["fingerprint"]
             config.write_text(
-                config.read_text().replace("[copilot]\nenabled = false\n", "[copilot]\n")
+                config.read_text().replace("[runners.copilot]\nenabled = false", "[runners.copilot]\nenabled = true")
                 .replace("workers = 2", "workers = 3").replace("max_calls = 1", "max_calls = 2")
             )
             with patch.dict(os.environ, {"RAUXA_COPILOT_BIN": str(self.binary)}):
@@ -192,6 +195,31 @@ max_calls = 1
             config.write_text(config.read_text().replace('model = "test-model"', 'model = "different-model"'))
             self.assertEqual(main(["run", str(config), "--resume"]), 1)
         self.assertIn("config changed", output.getvalue())
+
+    def test_cli_does_not_launch_without_explicit_opt_in(self):
+        config = self.cli_config()
+        original = config.read_text().split("[runners.copilot]")[0]
+        for index, section in enumerate(("", "[runners.copilot]", "[runners.copilot]\nworkers=2\nmax_calls=1")):
+            with self.subTest(section=section):
+                name = f"manual-{index}"
+                config.write_text(original.replace('name = "cli"', f'name = "{name}"') + section)
+                output = StringIO()
+                with patch.dict(os.environ, {"RAUXA_COPILOT_BIN": str(self.binary)}), \
+                     patch.object(CopilotProcess, "preflight") as preflight, \
+                     redirect_stdout(output), redirect_stderr(output):
+                    self.assertEqual(main(["run", str(config)]), 3)
+                    preflight.assert_not_called()
+                self.assertFalse(self.events.exists())
+                run_dir = self.root / name
+                self.assertEqual(len(list((run_dir / "agent_exchange" / "requests").glob("*.md"))), 2)
+                status = run_dir / "dispatcher" / "status.json"
+                if section:
+                    disabled = json.loads(status.read_text())
+                    self.assertEqual(disabled["status"], "disabled")
+                    self.assertFalse(disabled["settings"]["enabled"])
+                    self.assertEqual(disabled["settings"]["origins"]["enabled"], "default")
+                else:
+                    self.assertFalse(status.exists())
 
     def test_nonzero_errors_and_judge_error_policy(self):
         cfg = run_config(self.root, count=1)

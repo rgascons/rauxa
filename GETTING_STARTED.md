@@ -109,7 +109,7 @@ same config a second time stops with "already holds a run":
 - For a fresh run, delete the folder or change `name`.
 
 A run refuses to resume if its dataset config has changed since it started, so the results
-match the config recorded in `manifest.json`. Operational `[copilot]` settings are excluded:
+match the config recorded in `manifest.json`. Operational `[runners.copilot]` settings are excluded:
 workers, call caps, and executable selection may change on resume without resetting usage.
 
 ## 6. Change what gets generated
@@ -195,10 +195,11 @@ This machine-local setting intentionally has no TOML key; an invalid explicit ch
 
 Start LanguageTool as in step 2, or explicitly disable it in your config before the first run.
 Copy [the Copilot config](configs/castellanismes_copilot.toml), choose models available to
-your account, and review its `[copilot]` section:
+your account, and review its `[runners.copilot]` section:
 
 ```toml
-[copilot]
+[runners.copilot]
+enabled = true
 workers = 4
 max_calls = 500
 ```
@@ -210,8 +211,10 @@ rauxa run configs/castellanismes_copilot.toml
 rauxa summary out/runs/castellanismes_copilot
 ```
 
-Declaring `[copilot]` enables automation; `enabled = true` is unnecessary. Without the
-section, automation stays off. An explicit `enabled = false` keeps the settings but disables it.
+Automation requires explicit `enabled = true` because CLI calls can incur costs. Without the
+section or the `enabled` key, automation stays off. `enabled = false` keeps the settings but
+disables it. Older configs must rename `[copilot]` to `[runners.copilot]` and add
+`enabled = true` to keep using automation.
 
 The dispatcher answers the pipeline's writer, repair, and judge requests and resumes
 automatically. `workers` caps concurrent CLI calls across all roles. `max_calls` caps
@@ -226,7 +229,7 @@ rauxa run configs/castellanismes_copilot.toml --resume
 Copilot settings are configured only in TOML; there are no Copilot-specific CLI flags.
 Workers, caps, and executable choices can change on resume without changing the dataset
 fingerprint. Models, source budgets, and backend timeout/retry settings cannot.
-Set `enabled = false` in `[copilot]` to select the manual file workflow.
+Set `enabled = false` in `[runners.copilot]` to select the manual file workflow.
 
 Transport/JSON failures are retried up to each backend's `max_retries` total attempts,
 with its `timeout` in seconds per attempt. Exhausted requests are recorded and processing
