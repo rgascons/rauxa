@@ -13,9 +13,10 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import asdict
 from typing import Any, Callable
 
+from .cli_runner import AttemptResult, CliRunner
 from .config import CopilotSettings, RunConfig
 from .controller import Pipeline, PipelineError, RunResult
-from .copilot import AttemptResult, CopilotProcess
+from .copilot import CopilotProcess
 from .llm import BackendUnavailable, validate_agent_answer, validate_request
 from .progress import Progress
 from .storage import RunLock, append_record, read_records, write_json
@@ -25,8 +26,10 @@ class Dispatcher:
     def __init__(
         self, config: RunConfig, settings: CopilotSettings, *, resume: bool = False,
         log: Callable[[str], None] | None = None,
+        runner_factory: Callable[[int], CliRunner] | None = None,
     ):
         self.config, self.settings, self.resume = config, settings, resume
+        self._runner_factory = runner_factory
         self.log = log or (lambda text: print(text, file=sys.stderr, flush=True))
         self.directory = config.run_dir() / "dispatcher"
         self.exchange = config.run_dir() / "agent_exchange"
@@ -113,7 +116,7 @@ class Dispatcher:
         self.failed.add(rid)
         self.log(f"Copilot {request['kind']} {rid}: failed after {self.attempts[rid]} attempts: {error['category']}")
 
-    def _attempt(self, runner: CopilotProcess, request: dict[str, Any], attempt: int) -> AttemptResult:
+    def _attempt(self, runner: CliRunner, request: dict[str, Any], attempt: int) -> AttemptResult:
         if attempt > 1 and self.cancel.wait(min(2 ** min(attempt - 2, 4), 10)):
             raise InterruptedError("Copilot dispatch interrupted")
         return runner.run(
@@ -132,7 +135,7 @@ class Dispatcher:
             self.last_errors[rid] = {"category": result.category, "message": result.message}
         self._event("result", id=rid, attempt=self.attempts[rid], category=result.category, message=result.message)
 
-    def _answer_pending(self, ids: list[str], runner: CopilotProcess) -> bool:
+    def _answer_pending(self, ids: list[str], runner: CliRunner) -> bool:
         queue = deque()
         for rid in ids:
             # Validate the identifier before constructing a path from it.
@@ -239,7 +242,10 @@ class Dispatcher:
                     raise InterruptedError("Copilot dispatch interrupted")
                 old_handler = signal.signal(signal.SIGTERM, interrupt)
             try:
-                runner = CopilotProcess(self.settings, lock.fileno())
+                runner: CliRunner = (
+                    CopilotProcess(self.settings, lock.fileno()) if self._runner_factory is None
+                    else self._runner_factory(lock.fileno())
+                )
                 self.executable = runner.executable
                 runner.preflight()
                 self.version = runner.version

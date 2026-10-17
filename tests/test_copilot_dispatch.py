@@ -361,7 +361,13 @@ with RunLock(Path(sys.argv[1])) as lock:
         active = peak = 0
 
         class FastRunner:
-            def run(self, request, backend, cancel, started):
+            executable = "fast-test-cli"
+            version = "test"
+
+            def preflight(self):
+                pass
+
+            def run(self, request, backend, cancel, started=lambda _: None):
                 nonlocal active, peak
                 with concurrency_lock:
                     active += 1

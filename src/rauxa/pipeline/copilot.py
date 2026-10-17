@@ -11,10 +11,10 @@ import sys
 import tempfile
 import threading
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from .cli_runner import AttemptResult
 from .config import BackendConfig, CopilotSettings
 from .llm import BackendUnavailable, LLMError, validate_agent_answer
 
@@ -45,13 +45,6 @@ def _benign_settings(path: Path) -> bool:
     return isinstance(settings, dict) and all(
         key in BENIGN_SETTINGS and value is BENIGN_SETTINGS[key] for key, value in settings.items()
     )
-
-
-@dataclass
-class AttemptResult:
-    answer: dict[str, Any] | None = None
-    category: str = ""
-    message: str = ""
 
 
 class CopilotProcess:
