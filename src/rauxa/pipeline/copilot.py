@@ -25,7 +25,26 @@ FLAGS = (
     "--no-remote", "--no-remote-export", "--output-format=text",
 )
 TOKEN_VARS = ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN")
+BENIGN_SETTINGS = {"bashEnv": False}
 MAX_OUTPUT = 8 * 1024 * 1024
+
+
+def _read_profile_json(path: Path) -> Any:
+    lines = path.read_text(encoding="utf-8").splitlines()
+    # Copilot CLI prefixes its managed JSON files with `//` comment lines.
+    while lines and lines[0].lstrip().startswith("//"):
+        lines.pop(0)
+    return json.loads("\n".join(lines))
+
+
+def _benign_settings(path: Path) -> bool:
+    try:
+        settings = _read_profile_json(path)
+    except (ValueError, OSError):
+        return False
+    return isinstance(settings, dict) and all(
+        key in BENIGN_SETTINGS and value is BENIGN_SETTINGS[key] for key, value in settings.items()
+    )
 
 
 @dataclass
@@ -65,6 +84,7 @@ class CopilotProcess:
             present = [
                 name for name in custom
                 if (home / name).exists() and (not (home / name).is_dir() or any((home / name).iterdir()))
+                and not (name == "settings.json" and _benign_settings(home / name))
             ]
             if present:
                 raise BackendUnavailable(
@@ -74,7 +94,7 @@ class CopilotProcess:
             state = home / "config.json"
             if state.exists():
                 try:
-                    config = json.loads(state.read_text(encoding="utf-8"))
+                    config = _read_profile_json(state)
                 except (ValueError, OSError) as e:
                     raise BackendUnavailable("cannot verify Copilot profile; use a token or a login-only COPILOT_HOME") from e
                 if not isinstance(config, dict) or any("plugin" in k.lower() and v for k, v in config.items()):

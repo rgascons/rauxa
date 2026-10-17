@@ -207,6 +207,24 @@ max_calls = 1
         with patch.dict(os.environ, {"COPILOT_HOME": str(home)}, clear=True):
             env = CopilotProcess._environment(self.root)
             self.assertEqual(env["COPILOT_HOME"], str(home))
+            state = home / "config.json"
+            state.write_text('// This file is managed automatically.\n{"loggedInUsers": []}\n')
+            self.assertEqual(CopilotProcess._environment(self.root)["COPILOT_HOME"], str(home))
+            state.write_text('// managed\n{"installedPlugins": ["x"]}\n')
+            with self.assertRaisesRegex(BackendUnavailable, "plugin state"):
+                CopilotProcess._environment(self.root)
+            state.write_text("not json")
+            with self.assertRaisesRegex(BackendUnavailable, "cannot verify"):
+                CopilotProcess._environment(self.root)
+            state.unlink()
+            settings = home / "settings.json"
+            settings.write_text('{\n  "bashEnv": false\n}\n')
+            self.assertEqual(CopilotProcess._environment(self.root)["COPILOT_HOME"], str(home))
+            for content in ('{"bashEnv": true}', '{"bashEnv": false, "hooks": {}}', "not json"):
+                settings.write_text(content)
+                with self.assertRaisesRegex(BackendUnavailable, "customizations found: settings.json"):
+                    CopilotProcess._environment(self.root)
+            settings.unlink()
             (home / "hooks").mkdir()
             self.assertEqual(CopilotProcess._environment(self.root)["COPILOT_HOME"], str(home))
             (home / "hooks" / "custom.json").write_text("{}")
