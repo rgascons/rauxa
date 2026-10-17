@@ -189,8 +189,8 @@ instead of loading potentially executable hooks or plugins. Your normal profile 
 modified. Each request uses a fresh conversation in a temporary working directory, with no
 model tools; this is context/permission isolation, **not an OS sandbox**.
 
-For an executable not on PATH, set `RAUXA_COPILOT_BIN` to its executable name or path, or use
-`--copilot-command BIN`. Selection order is CLI, environment, then `copilot` on PATH.
+For an executable not on PATH, set `RAUXA_COPILOT_BIN` to its executable name or path.
+Selection order is the environment variable, then `copilot` on PATH.
 This machine-local setting intentionally has no TOML key; an invalid explicit choice fails.
 
 Start LanguageTool as in step 2, or explicitly disable it in your config before the first run.
@@ -199,7 +199,6 @@ your account, and review its `[copilot]` section:
 
 ```toml
 [copilot]
-enabled = true
 workers = 4
 max_calls = 500
 ```
@@ -211,20 +210,23 @@ rauxa run configs/castellanismes_copilot.toml
 rauxa summary out/runs/castellanismes_copilot
 ```
 
+Declaring `[copilot]` enables automation; `enabled = true` is unnecessary. Without the
+section, automation stays off. An explicit `enabled = false` keeps the settings but disables it.
+
 The dispatcher answers the pipeline's writer, repair, and judge requests and resumes
 automatically. `workers` caps concurrent CLI calls across all roles. `max_calls` caps
 cumulative launch reservations, including retries, across the whole run.
-When the cap is reached, exit 3 means the remaining work is waiting, not failed. Raise the
-cap in TOML or override it when resuming:
+When the cap is reached, exit 3 means the remaining work is waiting, not failed. Raise
+`max_calls` in TOML (and change `workers` there if needed), then resume:
 
 ```bash
-rauxa run configs/castellanismes_copilot.toml --resume --copilot-max-calls 1000 --copilot-workers 2
+rauxa run configs/castellanismes_copilot.toml --resume
 ```
 
-CLI flags override TOML, which overrides defaults. Omitted flags do not mask TOML.
+Copilot settings are configured only in TOML; there are no Copilot-specific CLI flags.
 Workers, caps, and executable choices can change on resume without changing the dataset
 fingerprint. Models, source budgets, and backend timeout/retry settings cannot.
-`--no-copilot` temporarily selects the manual file workflow.
+Set `enabled = false` in `[copilot]` to select the manual file workflow.
 
 Transport/JSON failures are retried up to each backend's `max_retries` total attempts,
 with its `timeout` in seconds per attempt. Exhausted requests are recorded and processing

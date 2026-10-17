@@ -145,11 +145,12 @@ section enables a bounded pool of fresh Copilot CLI sessions and automatic resum
 
 ```bash
 rauxa run configs/castellanismes_copilot.toml
-rauxa run configs/castellanismes_copilot.toml --resume --copilot-max-calls 1000
+# If the call cap is reached, increase max_calls in TOML before resuming.
+rauxa run configs/castellanismes_copilot.toml --resume
 ```
 
-Workers and the cumulative call cap live in TOML, with CLI overrides. Executable selection
-is machine-local (`--copilot-command`, `RAUXA_COPILOT_BIN`, or PATH). These operational
+Declaring `[copilot]` enables automation; workers and the cumulative call cap live only in
+TOML. Executable selection is machine-local (`RAUXA_COPILOT_BIN`, then PATH). These operational
 settings do not affect the dataset fingerprint. Copilot subscription usage still applies.
 See [WSL setup and authentication](GETTING_STARTED.md#automated-copilot-cli-in-wsl) and the
 [`[copilot]` reference](CONFIG.md#copilot) before starting.

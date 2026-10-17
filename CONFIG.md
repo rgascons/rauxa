@@ -212,23 +212,25 @@ resumes until finished or paused by its call cap. Existing API backends still wo
 
 ```toml
 [copilot]
-enabled = true
 workers = 4
 max_calls = 500
 ```
 
-| Key | Default | CLI override | Meaning |
-|---|---|---|---|
-| `enabled` | `false` | `--copilot` / `--no-copilot` | Enable automation; requires at least one referenced `type = "agent"` backend |
-| `workers` | `4` | `--copilot-workers N` | Positive integer: maximum concurrent CLI calls across writers, repairs, and judges |
-| `max_calls` | unset | `--copilot-max-calls N` | Required positive integer when enabled: cumulative invocation cap for the whole run, including retries |
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `true` when `[copilot]` is present, otherwise `false` | Optional; set `false` to keep the section configured but disabled. Automation requires at least one referenced `type = "agent"` backend |
+| `workers` | `4` | Positive integer: maximum concurrent CLI calls across writers, repairs, and judges |
+| `max_calls` | unset | Required positive integer when enabled: cumulative invocation cap for the whole run, including retries |
 
-Precedence is **explicit CLI flag, then explicit TOML value, then default**. Without this
-section, manual/API behavior is unchanged. `--no-copilot` temporarily restores manual
-request answering without changing the file. Unknown `[copilot]` keys are errors.
+Dispatcher settings live **only in TOML**, with no Copilot-specific command-line overrides.
+Declaring `[copilot]` enables automation without needing `enabled = true`. Even an empty
+section enables it, so `max_calls` must be supplied in TOML unless automation is explicitly
+disabled. Without this section, manual/API behavior is unchanged.
+`enabled = false` disables automation while retaining its settings.
+Existing explicit `enabled = true` settings remain valid. Unknown `[copilot]` keys are errors.
 
 There is deliberately **no executable key in TOML**. Executable resolution is:
-`--copilot-command BIN`, then `RAUXA_COPILOT_BIN`, then `copilot` on PATH. The chosen value
+`RAUXA_COPILOT_BIN`, then `copilot` on PATH. The chosen value
 is one executable name/path, not a shell command with arguments. An invalid explicit choice
 is an error, not permission to fall back. The selected binary must pass version and
 automation-capability preflight.
@@ -239,11 +241,13 @@ reset on resume: raise it to allow more work. A cap at or below recorded usage l
 additional calls. Dataset/source/model settings, including backend timeout/retry settings,
 remain fingerprinted.
 
-Each invocation records effective settings and their sources (`cli`, `toml`, `default`,
+Each invocation records effective settings and their sources (`toml`, `default`,
 `env:RAUXA_COPILOT_BIN`, or `path`), the resolved binary and version in
 `dispatcher/events.jsonl`. `dispatcher/status.json` and the final manifest's `dispatcher`
 section expose current settings and counters; `rauxa summary` displays them even while
 the run is waiting. This provenance is outside the fingerprint.
+Implicit enabling from section presence is recorded as `toml:copilot`, distinct from
+an explicit `toml:copilot.enabled` value.
 
 Calls are reserved durably before launch. A crash can leave a reservation without a
 confirmed answer; it still consumes budget. This is not an exactly-once billing guarantee,
@@ -288,5 +292,5 @@ gec = 0.2
 `rauxa run CONFIG --resume` continues an interrupted or waiting run from its run folder. The
 dataset config is fingerprinted, and **any dataset configuration change** refuses the resume, including keys that are ignored
 (such as `count` on a procedural source) and reordering sources. To change the config, use a new
-`name` or delete the old run folder. The operational `[copilot]` section and its CLI/environment
-overrides are excluded from this fingerprint and can change on resume.
+`name` or delete the old run folder. The operational `[copilot]` section and executable
+environment selection are excluded from this fingerprint and can change on resume.
