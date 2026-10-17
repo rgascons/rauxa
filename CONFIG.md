@@ -213,14 +213,14 @@ resumes until finished or paused by its call cap. Existing API backends still wo
 ```toml
 [runners.copilot]
 enabled = true
-workers = 4
+concurrency = 4
 max_calls = 500
 ```
 
 | Key | Default | Meaning |
 |---|---|---|
 | `enabled` | `false` | Explicitly set `true` to allow automated calls, which can incur costs. Automation requires at least one referenced `type = "agent"` backend |
-| `workers` | `4` | Positive integer: maximum concurrent CLI calls across writers, repairs, and judges |
+| `concurrency` | `4` | Positive integer: maximum concurrent CLI calls across writers, repairs, and judges |
 | `max_calls` | unset | Required positive integer when enabled: cumulative invocation cap for the whole run, including retries |
 
 Runner settings live **only in TOML**, with no Copilot-specific command-line overrides.
@@ -230,9 +230,10 @@ key, or `enabled = false`, manual/API behavior is unchanged and no Copilot CLI i
 `max_calls` is required only when enabled.
 
 **Migration:** rename the former `[copilot]` section to `[runners.copilot]` and explicitly
-add `enabled = true` if you want automated execution. The old section is rejected with a
-migration error, not silently ignored or treated as an alias. Unknown runner names and
-unknown `[runners.copilot]` keys are also errors.
+add `enabled = true` if you want automated execution. Rename the runner's `workers` key to
+`concurrency`; LanguageTool and judge `workers` settings are unchanged. The old section and
+runner key are rejected with migration errors, not silently ignored or treated as aliases.
+Unknown runner names and unknown `[runners.copilot]` keys are also errors.
 
 There is deliberately **no executable key in TOML**. Executable resolution is:
 `RAUXA_COPILOT_BIN`, then `copilot` on PATH. The chosen value
@@ -241,10 +242,9 @@ is an error, not permission to fall back. The selected binary must pass version 
 automation-capability preflight.
 
 Runner settings are parsed separately from `RunConfig` and **never enter its fingerprint**.
-Migrating the section or changing `enabled`, workers, the call cap, or executable does not
+Migrating the section or changing `enabled`, concurrency, the call cap, or executable does not
 prevent `--resume`. The cap is not reset on resume: raise it to allow more work. A cap at or
-below recorded usage launches no
-additional calls. Dataset/source/model settings, including backend timeout/retry settings,
+below recorded usage launches no additional calls. Dataset/source/model settings, including backend timeout/retry settings,
 remain fingerprinted.
 
 Each invocation records effective settings and their sources (`toml`, `default`,
@@ -254,6 +254,8 @@ section expose current settings and counters; `rauxa summary` displays them even
 the run is waiting. This provenance is outside the fingerprint.
 Explicit settings use origins such as `toml:runners.copilot.enabled`. An omitted `enabled`
 key is recorded as `default`, even when the runner section is present.
+New records and summaries use `concurrency`; summaries can still read older records that
+stored this limit as `workers`, preserving their original provenance.
 
 Calls are reserved durably before launch. A crash can leave a reservation without a
 confirmed answer; it still consumes budget. This is not an exactly-once billing guarantee,

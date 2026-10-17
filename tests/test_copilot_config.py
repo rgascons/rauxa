@@ -35,9 +35,9 @@ class TestCopilotConfig(unittest.TestCase):
         for extra in (
             "[runners]",
             "[runners.copilot]",
-            "[runners.copilot]\nworkers=2\nmax_calls=10",
-            "[runners.copilot]\nenabled=true\nworkers=2\nmax_calls=10",
-            "[runners.copilot]\nenabled=false\nworkers=8\nmax_calls=200",
+            "[runners.copilot]\nconcurrency=2\nmax_calls=10",
+            "[runners.copilot]\nenabled=true\nconcurrency=2\nmax_calls=10",
+            "[runners.copilot]\nenabled=false\nconcurrency=8\nmax_calls=200",
         ):
             modified, _ = self.load(extra)
             self.assertEqual(run.fingerprint(), modified.fingerprint())
@@ -50,7 +50,7 @@ class TestCopilotConfig(unittest.TestCase):
             ("[runners]", False, False, "default"),
             ("[runners.copilot]", True, False, "default"),
             ("[runners.copilot]\nmax_calls=5", True, False, "default"),
-            ("[runners.copilot]\nworkers=2\nmax_calls=10", True, False, "default"),
+            ("[runners.copilot]\nconcurrency=2\nmax_calls=10", True, False, "default"),
             ("[runners.copilot]\nenabled=true\nmax_calls=5", True, True, "toml:runners.copilot.enabled"),
             ("[runners.copilot]\nenabled=false", True, False, "toml:runners.copilot.enabled"),
         ):
@@ -63,7 +63,7 @@ class TestCopilotConfig(unittest.TestCase):
                 self.assertEqual(settings.origins["enabled"], origin)
 
     def test_only_enabled_runner_requires_explicit_cap(self):
-        for extra in ("[runners.copilot]", "[runners.copilot]\nworkers=2"):
+        for extra in ("[runners.copilot]", "[runners.copilot]\nconcurrency=2"):
             with self.subTest(extra=extra):
                 _, config = self.load(extra)
                 self.assertFalse(resolve_copilot(config).enabled)
@@ -77,16 +77,16 @@ class TestCopilotConfig(unittest.TestCase):
         self.assertFalse(resolve_copilot(disabled).enabled)
 
     def test_toml_settings_and_default_origins(self):
-        _, config = self.load("[runners.copilot]\nenabled=true\nworkers=2\nmax_calls=10")
+        _, config = self.load("[runners.copilot]\nenabled=true\nconcurrency=2\nmax_calls=10")
         settings = resolve_copilot(config, environ={})
-        self.assertEqual((settings.enabled, settings.workers, settings.max_calls), (True, 2, 10))
-        self.assertEqual(settings.origins["workers"], "toml:runners.copilot.workers")
+        self.assertEqual((settings.enabled, settings.concurrency, settings.max_calls), (True, 2, 10))
+        self.assertEqual(settings.origins["concurrency"], "toml:runners.copilot.concurrency")
         self.assertEqual(settings.origins["max_calls"], "toml:runners.copilot.max_calls")
         self.assertEqual(settings.origins["enabled"], "toml:runners.copilot.enabled")
         _, config = self.load("[runners.copilot]\nmax_calls=5")
         default = resolve_copilot(config, environ={})
-        self.assertEqual(default.workers, 4)
-        self.assertEqual(default.origins["workers"], "default")
+        self.assertEqual(default.concurrency, 4)
+        self.assertEqual(default.origins["concurrency"], "default")
 
     def test_executable_precedence_and_no_fallback(self):
         config = CopilotConfig()
@@ -107,6 +107,7 @@ class TestCopilotConfig(unittest.TestCase):
     def test_copilot_cli_overrides_are_rejected(self):
         parser = build_parser()
         for flags in (["--copilot"], ["--no-copilot"], ["--copilot-workers", "2"],
+                      ["--copilot-concurrency", "2"],
                       ["--copilot-max-calls", "5"], ["--copilot-command", "copilot"]):
             with self.subTest(flags=flags), redirect_stderr(StringIO()), self.assertRaises(SystemExit) as error:
                 parser.parse_args(["run", "example.toml", *flags])
@@ -114,12 +115,20 @@ class TestCopilotConfig(unittest.TestCase):
         self.assertTrue(parser.parse_args(["run", "example.toml", "--resume"]).resume)
 
     def test_validation(self):
-        for extra in ('workers=0', 'workers=true', 'max_calls=-1', 'enabled="yes"', 'executable="copilot"'):
+        for extra in ('concurrency=0', 'concurrency=-1', 'concurrency=true', 'concurrency=1.5',
+                      'concurrency="2"', 'max_calls=-1', 'enabled="yes"', 'executable="copilot"'):
             with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, r"runners\.copilot"):
                 self.load("[runners.copilot]\n" + extra)
         with self.assertRaisesRegex(ValueError, "requires"):
             resolve_copilot(CopilotConfig(enabled=True))
         self.assertFalse(resolve_copilot(CopilotConfig(enabled=False)).enabled)
+
+    def test_workers_key_requires_migration(self):
+        for options in ("workers=2", "workers=2\nconcurrency=3"):
+            with self.subTest(options=options), self.assertRaisesRegex(
+                ValueError, r"runners\.copilot\.workers has been renamed to runners\.copilot\.concurrency",
+            ):
+                self.load("[runners.copilot]\n" + options)
 
     def test_runner_structure_and_unknown_names_are_rejected(self):
         for extra, error in (

@@ -10,7 +10,7 @@ pool_multiplier = 1.2
 
 [runners.copilot]
 enabled = true
-workers = 4
+concurrency = 4
 max_calls = 500       # cumulative CLI invocations, including retries; safe to raise on resume
 
 [[sources]]

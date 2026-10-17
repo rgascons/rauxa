@@ -151,7 +151,7 @@ rauxa run configs/castellanismes_runners.toml --resume
 ```
 
 Automation requires `enabled = true` in `[runners.copilot]` to avoid accidental costs; section
-presence alone does not enable it. Workers and the cumulative call cap live only in TOML.
+presence alone does not enable it. Concurrency and the cumulative call cap live only in TOML.
 Executable selection is machine-local (`RAUXA_COPILOT_BIN`, then PATH). These operational
 settings do not affect the dataset fingerprint. Copilot subscription usage still applies.
 See [WSL setup and authentication](GETTING_STARTED.md#automated-copilot-cli-in-wsl) and the

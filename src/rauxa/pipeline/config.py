@@ -148,7 +148,7 @@ class CopilotConfig:
     """Settings from [runners.copilot], excluded from RunConfig and its fingerprint."""
 
     enabled: bool = False
-    workers: int = 4
+    concurrency: int = 4
     max_calls: Optional[int] = None
     specified: frozenset[str] = field(default_factory=frozenset, repr=False)
     section_present: bool = field(default=False, repr=False)
@@ -156,7 +156,7 @@ class CopilotConfig:
     def validate(self) -> None:
         if type(self.enabled) is not bool:
             raise ValueError("runners.copilot.enabled must be a boolean")
-        for key in ("workers", "max_calls"):
+        for key in ("concurrency", "max_calls"):
             value = getattr(self, key)
             if key == "max_calls" and value is None:
                 continue
@@ -167,7 +167,7 @@ class CopilotConfig:
 @dataclass
 class CopilotSettings:
     enabled: bool
-    workers: int
+    concurrency: int
     max_calls: Optional[int]
     command: str
     origins: dict[str, str]
@@ -188,7 +188,7 @@ def resolve_copilot(
     config.validate()
     origins = {
         key: f"toml:runners.copilot.{key}" if key in config.specified else "default"
-        for key in ("enabled", "workers", "max_calls")
+        for key in ("enabled", "concurrency", "max_calls")
     }
     if config.enabled and config.max_calls is None:
         raise ValueError("automated dispatch requires runners.copilot.max_calls")
@@ -199,7 +199,7 @@ def resolve_copilot(
     else:
         command = "copilot"
         origins["command"] = "path"
-    return CopilotSettings(config.enabled, config.workers, config.max_calls, command, origins)
+    return CopilotSettings(config.enabled, config.concurrency, config.max_calls, command, origins)
 
 
 def _run_config(raw: dict[str, Any]) -> RunConfig:
@@ -235,7 +235,9 @@ def load_settings(path: str | Path) -> tuple[RunConfig, CopilotConfig]:
     options = runners.get("copilot", {})
     if not isinstance(options, dict):
         raise ValueError("[runners.copilot] must be a TOML table")
-    unknown = set(options) - {"enabled", "workers", "max_calls"}
+    if "workers" in options:
+        raise ValueError("runners.copilot.workers has been renamed to runners.copilot.concurrency")
+    unknown = set(options) - {"enabled", "concurrency", "max_calls"}
     if unknown:
         raise ValueError(
             f"unknown [runners.copilot] keys: {sorted(unknown)}; executable selection belongs in "

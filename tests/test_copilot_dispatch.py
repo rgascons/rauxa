@@ -39,10 +39,10 @@ class TestCopilotDispatch(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
 
-    def settings(self, cap, workers=4):
+    def settings(self, cap, concurrency=4):
         return resolve_copilot(
-            CopilotConfig(enabled=True, workers=workers, max_calls=cap,
-                          specified=frozenset(("enabled", "workers", "max_calls"))),
+            CopilotConfig(enabled=True, concurrency=concurrency, max_calls=cap,
+                          specified=frozenset(("enabled", "concurrency", "max_calls"))),
             environ={"RAUXA_COPILOT_BIN": str(self.binary)},
         )
 
@@ -56,7 +56,7 @@ class TestCopilotDispatch(unittest.TestCase):
         initial = Dispatcher(cfg, self.settings(2), log=lambda _: None).run()
         self.assertEqual(initial.status, "waiting")
         self.assertEqual(initial.manifest["dispatcher"]["calls_used"], 2)
-        resumed = Dispatcher(cfg, self.settings(8, workers=2), resume=True, log=lambda _: None).run()
+        resumed = Dispatcher(cfg, self.settings(8, concurrency=2), resume=True, log=lambda _: None).run()
         self.assertEqual(resumed.status, "complete")
         self.assertEqual(resumed.selected, 4)
         self.assertEqual(resumed.manifest["dispatcher"]["calls_used"], 8)
@@ -70,7 +70,7 @@ class TestCopilotDispatch(unittest.TestCase):
         history = list(read_records(cfg.run_dir() / "dispatcher" / "events.jsonl"))
         settings = [r["settings"] for r in history if r["event"] == "settings"]
         self.assertEqual([r["max_calls"] for r in settings], [2, 8])
-        self.assertEqual(settings[-1]["origins"]["workers"], "toml:runners.copilot.workers")
+        self.assertEqual(settings[-1]["origins"]["concurrency"], "toml:runners.copilot.concurrency")
         again = Dispatcher(cfg, self.settings(8), resume=True, log=lambda _: None).run()
         self.assertEqual(again.status, "complete")
         self.assertEqual(len(self.logs()), 8)
@@ -149,7 +149,7 @@ type = "agent"
 model = "test-model"
 [runners.copilot]
 enabled = true
-workers = 2
+concurrency = 2
 max_calls = 1
 ''', encoding="utf-8")
         return config
@@ -165,11 +165,38 @@ max_calls = 1
             self.assertEqual(main(["summary", str(self.root / "cli"), "--samples", "0"]), 0)
         self.assertIn("env:RAUXA_COPILOT_BIN", output.getvalue())
         self.assertIn("toml:runners.copilot.max_calls", output.getvalue())
+        self.assertIn("concurrency: 2 (toml:runners.copilot.concurrency)", output.getvalue())
         manifest = json.loads((self.root / "cli" / "manifest.json").read_text())
         self.assertTrue(manifest["dispatcher"]["settings"]["enabled"])
         self.assertEqual(manifest["dispatcher"]["settings"]["origins"]["enabled"], "toml:runners.copilot.enabled")
         history = list(read_records(self.root / "cli" / "dispatcher" / "events.jsonl"))
         self.assertEqual([r["settings"]["max_calls"] for r in history if r["event"] == "settings"], [1, 2])
+
+    def test_summary_reads_legacy_worker_settings(self):
+        config = self.cli_config()
+        output = StringIO()
+        with patch.dict(os.environ, {"RAUXA_COPILOT_BIN": str(self.binary)}), \
+             redirect_stdout(output), redirect_stderr(output):
+            self.assertEqual(main(["run", str(config)]), 3)
+        status_path = self.root / "cli" / "dispatcher" / "status.json"
+        status = json.loads(status_path.read_text())
+        settings = status["settings"]
+        settings["workers"] = settings.pop("concurrency")
+        settings["origins"].pop("concurrency")
+        settings["origins"]["workers"] = "toml:copilot.workers"
+        status_path.write_text(json.dumps(status))
+        output = StringIO()
+        with redirect_stdout(output), redirect_stderr(output):
+            self.assertEqual(main(["summary", str(self.root / "cli")]), 1)
+        self.assertIn("concurrency: 2 (toml:copilot.workers)", output.getvalue())
+        with patch.dict(os.environ, {"RAUXA_COPILOT_BIN": str(self.binary)}), \
+             redirect_stdout(output), redirect_stderr(output):
+            self.assertEqual(main(["run", str(config), "--resume"]), 3)
+        resumed = json.loads(status_path.read_text())
+        self.assertEqual(resumed["calls_used"], 1)
+        self.assertEqual(resumed["settings"]["concurrency"], 2)
+        self.assertNotIn("workers", resumed["settings"])
+        self.assertEqual(len(self.logs()), 1)
 
     def test_disabled_copilot_and_dataset_fingerprint(self):
         config = self.cli_config()
@@ -186,7 +213,7 @@ max_calls = 1
             before = json.loads((self.root / "cli" / "state.json").read_text())["fingerprint"]
             config.write_text(
                 config.read_text().replace("[runners.copilot]\nenabled = false", "[runners.copilot]\nenabled = true")
-                .replace("workers = 2", "workers = 3").replace("max_calls = 1", "max_calls = 2")
+                .replace("concurrency = 2", "concurrency = 3").replace("max_calls = 1", "max_calls = 2")
             )
             with patch.dict(os.environ, {"RAUXA_COPILOT_BIN": str(self.binary)}):
                 self.assertEqual(main(["run", str(config), "--resume"]), 0)
@@ -199,7 +226,7 @@ max_calls = 1
     def test_cli_does_not_launch_without_explicit_opt_in(self):
         config = self.cli_config()
         original = config.read_text().split("[runners.copilot]")[0]
-        for index, section in enumerate(("", "[runners.copilot]", "[runners.copilot]\nworkers=2\nmax_calls=1")):
+        for index, section in enumerate(("", "[runners.copilot]", "[runners.copilot]\nconcurrency=2\nmax_calls=1")):
             with self.subTest(section=section):
                 name = f"manual-{index}"
                 config.write_text(original.replace('name = "cli"', f'name = "{name}"') + section)
@@ -381,7 +408,7 @@ with RunLock(Path(sys.argv[1])) as lock:
     def test_ten_thousand_candidates_bounded_scheduling(self):
         cfg = run_config(self.root, count=10000)
         cfg.backends["judge"] = BackendConfig(type="agent", model="judge-model")
-        dispatcher = Dispatcher(cfg, self.settings(10500), log=lambda _: None)
+        dispatcher = Dispatcher(cfg, self.settings(10500, concurrency=2), log=lambda _: None)
         requests = {}
         responses = {}
         events = []
@@ -430,7 +457,7 @@ with RunLock(Path(sys.argv[1])) as lock:
             for kind in ("write", "judge"):
                 ids = [rid for rid, r in requests.items() if r["kind"] == kind]
                 self.assertTrue(dispatcher._answer_pending(ids, FastRunner()))
-        self.assertLessEqual(peak, 4)
+        self.assertLessEqual(peak, 2)
         self.assertGreater(peak, 1)
         self.assertEqual(len(responses), 10500)
         self.assertEqual(sum(len(answer.get("items", [])) for answer in responses.values()), 10000)

@@ -110,7 +110,7 @@ same config a second time stops with "already holds a run":
 
 A run refuses to resume if its dataset config has changed since it started, so the results
 match the config recorded in `manifest.json`. Operational `[runners.copilot]` settings are excluded:
-workers, call caps, and executable selection may change on resume without resetting usage.
+concurrency, call caps, and executable selection may change on resume without resetting usage.
 
 ## 6. Change what gets generated
 
@@ -200,7 +200,7 @@ your account, and review its `[runners.copilot]` section:
 ```toml
 [runners.copilot]
 enabled = true
-workers = 4
+concurrency = 4
 max_calls = 500
 ```
 
@@ -214,20 +214,20 @@ rauxa summary out/runs/castellanismes_runners
 Automation requires explicit `enabled = true` because CLI calls can incur costs. Without the
 section or the `enabled` key, automation stays off. `enabled = false` keeps the settings but
 disables it. Older configs must rename `[copilot]` to `[runners.copilot]` and add
-`enabled = true` to keep using automation.
+`enabled = true` to keep using automation. Rename the runner's `workers` key to `concurrency`.
 
 The dispatcher answers the pipeline's writer, repair, and judge requests and resumes
-automatically. `workers` caps concurrent CLI calls across all roles. `max_calls` caps
+automatically. `concurrency` caps concurrent CLI calls across all roles. `max_calls` caps
 cumulative launch reservations, including retries, across the whole run.
 When the cap is reached, exit 3 means the remaining work is waiting, not failed. Raise
-`max_calls` in TOML (and change `workers` there if needed), then resume:
+`max_calls` in TOML (and change `concurrency` there if needed), then resume:
 
 ```bash
 rauxa run configs/castellanismes_runners.toml --resume
 ```
 
 Copilot settings are configured only in TOML; there are no Copilot-specific CLI flags.
-Workers, caps, and executable choices can change on resume without changing the dataset
+Concurrency, caps, and executable choices can change on resume without changing the dataset
 fingerprint. Models, source budgets, and backend timeout/retry settings cannot.
 Set `enabled = false` in `[runners.copilot]` to select the manual file workflow.
 

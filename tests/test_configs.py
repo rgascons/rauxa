@@ -22,6 +22,8 @@ class TestConfigs(unittest.TestCase):
                 settings = resolve_copilot(copilot, environ={})
                 self.assertTrue(settings.enabled)
                 self.assertEqual(settings.origins["enabled"], "toml:runners.copilot.enabled")
+                self.assertEqual(settings.concurrency, 4)
+                self.assertEqual(settings.origins["concurrency"], "toml:runners.copilot.concurrency")
 
 
 if __name__ == "__main__":

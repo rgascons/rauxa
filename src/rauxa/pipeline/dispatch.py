@@ -160,14 +160,14 @@ class Dispatcher:
         active = {}
         probed = set()
         last_snapshot = 0.0
-        with ThreadPoolExecutor(max_workers=self.settings.workers) as pool:
+        with ThreadPoolExecutor(max_workers=self.settings.concurrency) as pool:
             try:
                 while queue or active:
                     if self.cancel.is_set():
                         raise InterruptedError("Copilot dispatch interrupted")
                     busy_backends = {request["backend"] for request in active.values()}
                     for _ in range(len(queue)):
-                        if len(active) >= self.settings.workers or self.used >= self.settings.max_calls:
+                        if len(active) >= self.settings.concurrency or self.used >= self.settings.max_calls:
                             break
                         request = queue.popleft()
                         name, rid = request["backend"], request["id"]
