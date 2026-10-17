@@ -48,14 +48,14 @@ if mode in ("exit", "auth"):
     print("authentication required" if mode == "auth" else "worker error", file=sys.stderr)
     sys.exit(7)
 if role == "judge":
-    print(json.dumps({
+    answer = {
         "good_is_correct": True, "variants_are_correct": True, "bad_has_stated_error": True,
         "bad_has_other_errors": False, "natural": mode != "negative", "same_meaning": True, "comment": "",
-    }))
+    }
 elif role == "fix":
     good = re.search(r'"good": "([^"]+)"', prompt).group(1).replace("de acabar", "d'acabar")
     bad = re.search(r'"bad": "([^"]+)"', prompt).group(1)
-    print(json.dumps({"good": good, "bad": bad, "alternatives": []}, ensure_ascii=False))
+    answer = {"good": good, "bad": bad, "alternatives": []}
 else:
     n = int(re.search(r"Write (\d+) new pairs", prompt).group(1))
     seed = int(hashlib.sha256(prompt.encode()).hexdigest()[:8], 16)
@@ -67,4 +67,9 @@ else:
             "bad": f"El grup {seed + i} té que {verb}.",
             "alternatives": [],
         })
-    print(json.dumps({"items": items}, ensure_ascii=False))
+    answer = {"items": items}
+text = json.dumps(answer, ensure_ascii=False)
+if mode == "fenced":
+    # Models often wrap JSON in a Markdown fence despite being told not to.
+    text = f"Here is the JSON:\n```json\n{text}\n```"
+print(text)

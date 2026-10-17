@@ -194,7 +194,7 @@ Selection order is the environment variable, then `copilot` on PATH.
 This machine-local setting intentionally has no TOML key; an invalid explicit choice fails.
 
 Start LanguageTool as in step 2, or explicitly disable it in your config before the first run.
-Copy [the Copilot config](configs/castellanismes_runners.toml), choose models available to
+Copy [the Copilot config](configs/castellanismes_runners_llm_only.toml), choose models available to
 your account, and review its `[runners.copilot]` section:
 
 ```toml
@@ -207,8 +207,8 @@ max_calls = 500
 Then run:
 
 ```bash
-rauxa run configs/castellanismes_runners.toml
-rauxa summary out/runs/castellanismes_runners
+rauxa run configs/castellanismes_runners_llm_only.toml
+rauxa summary out/runs/castellanismes_runners_llm_only
 ```
 
 Automation requires explicit `enabled = true` because CLI calls can incur costs. Without the
@@ -223,7 +223,7 @@ When the cap is reached, exit 3 means the remaining work is waiting, not failed.
 `max_calls` in TOML (and change `concurrency` there if needed), then resume:
 
 ```bash
-rauxa run configs/castellanismes_runners.toml --resume
+rauxa run configs/castellanismes_runners_llm_only.toml --resume
 ```
 
 Copilot settings are configured only in TOML; there are no Copilot-specific CLI flags.

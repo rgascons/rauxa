@@ -77,8 +77,15 @@ class Writer:
             self.backend, [{"role": "system", "content": _WRITER_SYSTEM}, {"role": "user", "content": user}],
             kind="write", key=key, count=n,
         )
+        items = response.get("items")
+        if not isinstance(items, list) or not items:
+            # e.g. a reply cut off mid-list, where the parser can only recover one inner pair.
+            # Raising makes the batch a failed call instead of a silent empty success.
+            raise LLMError("writer reply has no nonempty 'items' list (truncated or malformed)")
         pairs = []
-        for raw in response.get("items", []):
+        for raw in items:
+            if not isinstance(raw, dict):
+                continue
             try:
                 pairs.append(_pair(raw))
             except LLMError:

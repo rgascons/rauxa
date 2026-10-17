@@ -16,7 +16,7 @@ from typing import Any, Callable
 
 from .cli_runner import AttemptResult
 from .config import BackendConfig, CopilotSettings
-from .llm import BackendUnavailable, LLMError, validate_agent_answer
+from .llm import BackendUnavailable, LLMError, parse_json_object, validate_agent_answer
 
 
 FLAGS = (
@@ -27,6 +27,22 @@ FLAGS = (
 TOKEN_VARS = ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN")
 BENIGN_SETTINGS = {"bashEnv": False}
 MAX_OUTPUT = 8 * 1024 * 1024
+
+
+# Copilot stderr that means the setup is wrong (stop the run) rather than one failed call.
+# HTTP statuses only count next to an HTTP-ish word, so a stray "404" in a message doesn't.
+_SETUP_ERROR = re.compile(
+    r"\b(?:http|status|code|error)\W{0,3}(?:401|403|404)\b|\b401\W{0,3}unauthorized\b|"
+    r"\b403\W{0,3}forbidden\b|\b404\W{0,3}not found\b|"
+    r"not authenticated|authentication (?:failed|required)|no authentication|not logged in|login required|"
+    r"unknown model|model .{0,80}(?:not found|not available)|invalid model|permission denied|"
+    r"(?:unknown|invalid) (?:option|argument|tool)",
+    re.IGNORECASE,
+)
+
+
+def is_setup_error(diagnostic: str) -> bool:
+    return bool(_SETUP_ERROR.search(diagnostic))
 
 
 def _read_profile_json(path: Path) -> Any:
@@ -195,15 +211,12 @@ class CopilotProcess:
                     return AttemptResult(category="timeout", message=f"Copilot exceeded the {backend.timeout:g}s attempt timeout")
                 if code == 127 and "rauxa: cannot launch Copilot:" in diagnostic:
                     raise BackendUnavailable(diagnostic)
-                if re.search(
-                    r"\b(?:401|403|404)\b|not authenticated|authentication (?:failed|required)|"
-                    r"no authentication|not logged in|login required|unknown model|model .{0,80}(?:not found|not available)|"
-                    r"invalid model|permission denied|(?:unknown|invalid) (?:option|argument|tool)",
-                    diagnostic, re.IGNORECASE,
-                ):
+                if is_setup_error(diagnostic):
                     raise BackendUnavailable(f"Copilot setup failed: {diagnostic}")
                 return AttemptResult(category="exit", message=f"Copilot exited {code}: {diagnostic}")
-            value = json.loads(output)
+            # Tolerant parsing (code fences, prose around the object), strict validation:
+            # a formatting slip shouldn't cost another paid attempt.
+            value = parse_json_object(output)
             return AttemptResult(answer=validate_agent_answer(value, request["kind"]))
         except TimeoutError as e:
             return AttemptResult(category="timeout", message=str(e))

@@ -1,9 +1,15 @@
+# Fully LLM-generated: every pair is written by the writer model and judged by the judge
+# model, with no template (procedural) source. Pairs are not correct by construction, so
+# have a native speaker review a sample (`rauxa review`, `rauxa calibrate`) before using
+# the dataset as a benchmark. To keep a guaranteed-correct base, add a
+# `type = "procedural"` source (see castellanismes_procedural.toml).
+#
 # Run inside WSL/Linux with a supported, authenticated GitHub Copilot CLI.
 # Set models available to your account before starting. See GETTING_STARTED.md.
 # No machine-specific executable paths or credentials belong in this file.
 
 [run]
-name = "castellanismes_runners_10k"
+name = "castellanismes_runners_llm_only_10k"
 target_size = 10000
 seed = 1
 pool_multiplier = 1.2

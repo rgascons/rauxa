@@ -88,6 +88,16 @@ class TestCopilotDispatch(unittest.TestCase):
         self.assertEqual(len(self.logs()), 4)
         self.assertEqual(final.manifest["dispatcher"]["retries"], 2)
 
+    def test_fenced_answers_are_accepted_without_retries(self):
+        cfg = run_config(self.root, count=2)
+        cfg.judge = JudgeConfig(enabled=True, backend="judge")
+        cfg.backends["judge"] = BackendConfig(type="agent", model="judge-model")
+        with patch.dict(os.environ, {"RAUXA_FAKE_MODE": "fenced"}):
+            result = Dispatcher(cfg, self.settings(10), log=lambda _: None).run()
+        self.assertEqual(result.status, "complete")
+        self.assertEqual(result.manifest["dispatcher"]["retries"], 0)
+        self.assertEqual(result.manifest["dispatcher"]["failed"], 0)
+
     def test_repairs_and_negative_judgements(self):
         cfg = run_config(self.root, count=2)
         cfg.sources[0].max_fix_attempts = 1

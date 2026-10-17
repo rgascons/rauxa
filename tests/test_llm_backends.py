@@ -173,5 +173,44 @@ class TestOpenAICompatibleBackend(unittest.TestCase):
         self.assertEqual(self.payload_for(temperature=0.0)["temperature"], 0.0)
 
 
+class TestWriterReplies(unittest.TestCase):
+    INFO = {"error": "tenir que", "correction": "haver de"}
+
+    def write(self, reply):
+        from rauxa.pipeline.agents import Writer
+
+        backend = SimpleNamespace(model="m", chat_json=lambda messages: reply)
+        return Writer(backend).write(self.INFO, [], 2)
+
+    def test_reply_without_items_is_a_failed_call(self):
+        # What the parser recovers from a reply cut off mid-list: one inner pair, no "items".
+        for reply in ({"good": "Ha de venir.", "bad": "Té que venir."}, {"items": []}, {"items": "x"}):
+            with self.assertRaisesRegex(LLMError, "items"):
+                self.write(reply)
+
+    def test_malformed_items_are_skipped(self):
+        pairs = self.write({"items": ["not a pair", {"good": ""}, {"good": "Ha de venir.", "bad": "Té que venir."}]})
+        self.assertEqual([(p.good, p.bad) for p in pairs], [("Ha de venir.", "Té que venir.")])
+
+
+class TestCopilotSetupErrors(unittest.TestCase):
+    def test_classification(self):
+        from rauxa.pipeline.copilot import is_setup_error
+
+        setup = [
+            "Error: HTTP 401", "request failed with status 403", "404 Not Found", "401 Unauthorized",
+            "error: authentication required", "You are not logged in", "unknown model 'gpt-9'",
+            "model claude-x is not available for your plan", "permission denied", "invalid option --foo",
+        ]
+        transient = [
+            "worker error", "processed 404 items before the connection reset", "rate limit, retry after 401ms",
+            "unexpected end of stream",
+        ]
+        for text in setup:
+            self.assertTrue(is_setup_error(text), text)
+        for text in transient:
+            self.assertFalse(is_setup_error(text), text)
+
+
 if __name__ == "__main__":
     unittest.main()
