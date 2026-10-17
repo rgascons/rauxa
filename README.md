@@ -155,6 +155,14 @@ settings do not affect the dataset fingerprint. Copilot subscription usage still
 See [WSL setup and authentication](GETTING_STARTED.md#automated-copilot-cli-in-wsl) and the
 [`[copilot]` reference](CONFIG.md#copilot) before starting.
 
+The dispatcher uses the `CliRunner` protocol in `rauxa.pipeline.cli_runner`: adapters expose
+`executable`, `version`, `preflight()`, and `run(...) -> AttemptResult`. Scheduling, budgets,
+and resume stay in the dispatcher; CLI permissions, authentication, parsing, and process
+cleanup stay in the adapter. Copilot remains the default and only configured provider.
+The internal `Dispatcher(..., runner_factory=...)` extension point receives the held run-lock
+file descriptor and returns a runner. It does not add provider selection or change request
+identities; do not switch adapter implementations when resuming an existing run.
+
 ## Command reference
 
 ```bash
