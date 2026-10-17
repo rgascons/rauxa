@@ -31,9 +31,13 @@ class Check(Protocol):
     def run(self, entry: dict[str, Any]) -> CheckResult: ...
 
 
-def _sentences(entry: dict[str, Any]) -> tuple[str, str, list[str]]:
+def _sentences(entry: dict[str, Any]) -> tuple[str, Optional[str], list[str]]:
+    """Correct sentence, incorrect (or dispreferred) sentence, accepted variants.
+
+    The second element is ``None`` for controls, which have only a valid sentence.
+    """
     meta = entry["metadata"]
-    return meta["sentence_good"], meta["sentence_bad"], meta["correct_variants"]
+    return meta["sentence_good"], meta.get("sentence_bad"), meta["correct_variants"]
 
 
 class SchemaCheck:
@@ -44,14 +48,22 @@ class SchemaCheck:
         if not entry.get("question") or entry.get("answer") in (None, ""):
             problems.append("missing question or answer")
         meta = entry.get("metadata", {})
-        for key in ("sentence_good", "sentence_bad", "correct_variants", "phenomenon", "format"):
+        kind = meta.get("kind", "pair")
+        required = ("sentence_good", "correct_variants", "phenomenon", "format")
+        if kind != "control":
+            required = ("sentence_good", "sentence_bad", "correct_variants", "phenomenon", "format")
+        for key in required:
             if not meta.get(key):
                 problems.append(f"missing metadata.{key}")
+        if kind not in ("pair", "preference", "control"):
+            problems.append(f"unknown kind {kind!r}")
+        elif kind == "control" and meta.get("sentence_bad") is not None:
+            problems.append("a control has no incorrect sentence")
         if not problems:
             good, bad, variants = _sentences(entry)
             if good not in variants:
                 problems.append("sentence_good not in correct_variants")
-            if bad in variants:
+            if bad is not None and bad in variants:
                 problems.append("sentence_bad is listed as a correct variant")
             if len(set(variants)) != len(variants):
                 problems.append("duplicate correct variants")
@@ -63,13 +75,18 @@ class OrthographyCheck:
 
     def run(self, entry: dict[str, Any]) -> CheckResult:
         good, bad, variants = _sentences(entry)
-        issues = {s: orthography_issues(s) for s in [bad, *variants]}
+        sentences = variants if bad is None else [bad, *variants]
+        issues = {s: orthography_issues(s) for s in sentences}
         issues = {s: i for s, i in issues.items() if i}
         return CheckResult(self.name, not issues, {"issues": issues})
 
 
 class MarkerCheck:
-    """The phenomenon's marker must match the incorrect sentence and no correct variant."""
+    """The phenomenon's marker must match the incorrect sentence and no correct variant.
+
+    Skipped for controls: a control can legitimately contain the suspect form (an accepted loan,
+    a valid sense), which is exactly what it tests.
+    """
 
     name = "marker"
 
@@ -78,6 +95,8 @@ class MarkerCheck:
 
     def run(self, entry: dict[str, Any]) -> CheckResult:
         good, bad, variants = _sentences(entry)
+        if bad is None:
+            return CheckResult(self.name, True, {"skipped": "control"})
         marker = self.markers.get(entry["metadata"]["phenomenon"])
         if marker is None:
             return CheckResult(self.name, True, {"skipped": "no marker for phenomenon"})
@@ -96,6 +115,8 @@ class MinimalPairCheck:
 
     def run(self, entry: dict[str, Any]) -> CheckResult:
         good, bad, _ = _sentences(entry)
+        if bad is None:
+            return CheckResult(self.name, True, {"skipped": "control"})
         span_good, span_bad, shared = edit_span(good, bad)
         ok = 0 < max(span_good, span_bad) <= self.max_edit_tokens and shared > 0
         return CheckResult(self.name, ok, {"span_good": span_good, "span_bad": span_bad, "shared": shared})
@@ -107,6 +128,10 @@ class LanguageToolCheck:
     ``expected_rule_hit`` records whether LanguageTool flagged the incorrect sentence with one
     of the phenomenon's expected rules. A miss means LanguageTool doesn't cover that case; it
     is reported in the manifest and only rejects the pair if ``require_bad_flagged`` is set.
+
+    ``metadata["languagetool_tolerated"]`` lists rule ids that may fire on a correct variant
+    without rejecting it, e.g. a rule that flags an accepted loan in a control. Tolerated
+    matches are recorded, never hidden. Controls have no incorrect sentence to flag.
     """
 
     name = "languagetool"
@@ -117,22 +142,33 @@ class LanguageToolCheck:
 
     def run(self, entry: dict[str, Any]) -> CheckResult:
         good, bad, variants = _sentences(entry)
-        variant_matches = {v: [summarize_match(m) for m in self.client.check(v)] for v in variants}
-        variant_matches = {v: m for v, m in variant_matches.items() if m}
+        tolerated_rules = set(entry["metadata"].get("languagetool_tolerated", []))
+        variant_matches, tolerated = {}, {}
+        for v in variants:
+            matches = [summarize_match(m) for m in self.client.check(v)]
+            blocking = [m for m in matches if m["rule_id"] not in tolerated_rules]
+            if blocking:
+                variant_matches[v] = blocking
+            if len(blocking) != len(matches):
+                tolerated[v] = [m for m in matches if m["rule_id"] in tolerated_rules]
+        if bad is None:
+            details = {"variant_matches": variant_matches, "kind": "control"}
+            if tolerated:
+                details["tolerated_matches"] = tolerated
+            return CheckResult(self.name, not variant_matches, details)
         bad_matches = [summarize_match(m) for m in self.client.check(bad)]
         expected = set(entry["metadata"].get("languagetool_rules", []))
         hit = bool(expected & {m["rule_id"] for m in bad_matches})
         passed = not variant_matches and (bool(bad_matches) or not self.require_bad_flagged)
-        return CheckResult(
-            self.name,
-            passed,
-            {
-                "variant_matches": variant_matches,
-                "bad_rules": sorted({m["rule_id"] for m in bad_matches}),
-                "bad_flagged": bool(bad_matches),
-                "expected_rule_hit": hit,
-            },
-        )
+        details = {
+            "variant_matches": variant_matches,
+            "bad_rules": sorted({m["rule_id"] for m in bad_matches}),
+            "bad_flagged": bool(bad_matches),
+            "expected_rule_hit": hit,
+        }
+        if tolerated:
+            details["tolerated_matches"] = tolerated
+        return CheckResult(self.name, passed, details)
 
 
 def build_checks(config: ChecksConfig, markers: dict[str, str], lt_client: Optional[LanguageToolClient]) -> list[Check]:

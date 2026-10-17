@@ -45,18 +45,32 @@ def review(
     labelled = 0
     for entry in todo[:n]:
         meta = entry["metadata"]
+        kind = meta.get("kind", "pair")
         others = [v for v in meta["correct_variants"] if v != meta["sentence_good"]]
-        print_fn(f"\n[{labelled + 1}/{min(n, len(todo))}] fenomen: {meta['phenomenon']}  ({meta['item_id']})")
+        label = "" if kind == "pair" else f"  [{kind}]"
+        print_fn(f"\n[{labelled + 1}/{min(n, len(todo))}] fenomen: {meta['phenomenon']}{label}  ({meta['item_id']})")
+        if meta.get("context"):
+            print_fn(f"  Context: {meta['context']}")
         print_fn(f"  ✓ {meta['sentence_good']}")
         for v in others:
             print_fn(f"  ✓ {v}")
-        print_fn(f"  ✗ {meta['sentence_bad']}")
-        good_ok = _ask("  Les frases ✓ són correctes i naturals? [s/n/q] ", input_fn)
-        if good_ok is None:
-            break
-        bad_ok = _ask("  La frase ✗ conté només l'error esperat? [s/n/q] ", input_fn)
-        if bad_ok is None:
-            break
+        if kind == "control":
+            good_ok = _ask("  La frase ✓ és correcta i natural (sense cap error)? [s/n/q] ", input_fn)
+            if good_ok is None:
+                break
+            bad_ok = None  # a control has no second sentence to judge
+        else:
+            print_fn(f"  {'≈' if kind == 'preference' else '✗'} {meta['sentence_bad']}")
+            good_ok = _ask("  Les frases ✓ són correctes i naturals? [s/n/q] ", input_fn)
+            if good_ok is None:
+                break
+            question = (
+                "  La frase ≈ és acceptable però menys adequada en un registre formal? [s/n/q] "
+                if kind == "preference" else "  La frase ✗ conté només l'error esperat? [s/n/q] "
+            )
+            bad_ok = _ask(question, input_fn)
+            if bad_ok is None:
+                break
         note = input_fn("  Comentari (opcional): ").strip()
         with labels_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps({
@@ -94,18 +108,23 @@ def calibrate(labels_path: Path, run_dir: Path) -> dict[str, Any]:
     verdicts = {r["item_id"]: r["verdict"] for r in _load(run_dir / "judge.jsonl") if "verdict" in r}
     checks = {r["item_id"]: r["passed"] for r in _load(run_dir / "checks.jsonl")}
 
+    def item_ok(label: dict[str, Any]) -> bool:
+        # bad_ok is None for controls, which have no second sentence.
+        return bool(label["good_ok"]) and label["bad_ok"] is not False
+
     item, good, bad = [], [], []
     for iid, label in labels.items():
         verdict = verdicts.get(iid)
         if verdict is None:
             continue
         failed = set(failed_questions(verdict))
-        item.append((label["good_ok"] and label["bad_ok"], verdict["passed"]))
+        item.append((item_ok(label), verdict["passed"]))
         good.append((label["good_ok"], not failed & {"good_is_correct", "variants_are_correct", "natural"}))
-        bad.append((label["bad_ok"], not failed & {"bad_has_stated_error", "bad_has_other_errors"}))
+        if label["bad_ok"] is not None:
+            bad.append((label["bad_ok"], not failed & {"bad_has_stated_error", "bad_has_other_errors"}))
 
     passed_checks = [l for iid, l in labels.items() if checks.get(iid)]
-    human_rejected = [l for l in passed_checks if not (l["good_ok"] and l["bad_ok"])]
+    human_rejected = [l for l in passed_checks if not item_ok(l)]
     return {
         "labels": len(labels),
         "judge_vs_human": {"item": _agreement(item), "good_sentences": _agreement(good), "bad_sentence": _agreement(bad)},

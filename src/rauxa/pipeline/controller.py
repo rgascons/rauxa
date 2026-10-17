@@ -276,8 +276,15 @@ class Pipeline:
             data = create_dataset(task, seed=self.cfg.seed, size=_HUGE, phenomena=(phenomenon,))
         except (AssertionError, TypeError, ValueError):
             return []
-        start = batch_index * k
-        return [(data[j]["metadata"]["sentence_good"], data[j]["metadata"]["sentence_bad"]) for j in range(start, start + k)]
+        # Writer examples are normative pairs only; skip preferences and controls. Pair-only
+        # tasks take exactly the k items they always took, so prompts don't change.
+        examples, j = [], batch_index * k
+        while len(examples) < k and j < batch_index * k + 50 * k:
+            meta = data[j]["metadata"]
+            if meta.get("kind", "pair") == "pair":
+                examples.append((meta["sentence_good"], meta["sentence_bad"]))
+            j += 1
+        return examples
 
     def _llm_entry(self, i: int, src: SourceConfig, phenomenon: str, pair: WrittenPair, revision_of: Optional[str] = None):
         info = self.info[src.task][phenomenon]
@@ -628,9 +635,10 @@ class Pipeline:
         missed = defaultdict(list)
         for iid, rec in self.check_records.items():
             details = next((r["details"] for r in rec["results"] if r["check"] == "languagetool"), None)
-            if details is None:
-                continue
             meta = self.candidates[iid]["metadata"]
+            # Controls have no incorrect sentence, so they say nothing about LanguageTool's coverage.
+            if details is None or meta.get("sentence_bad") is None:
+                continue
             c = lt[meta["phenomenon"]]
             c["checked"] += 1
             c["bad_flagged"] += details["bad_flagged"]
