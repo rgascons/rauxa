@@ -16,7 +16,7 @@ class TestConfigs(unittest.TestCase):
                 load_config(path)
 
     def test_copilot_examples_explicitly_enable_runner(self):
-        for name in ("castellanismes_copilot.toml", "castellanismes_copilot_10k.toml"):
+        for name in ("castellanismes_runners.toml", "castellanismes_runners_10k.toml"):
             with self.subTest(config=name):
                 _, copilot = load_settings(CONFIGS / name)
                 settings = resolve_copilot(copilot, environ={})

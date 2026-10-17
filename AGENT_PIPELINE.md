@@ -20,7 +20,7 @@ records that the run used an agent.
 ## Automatic Copilot CLI alternative
 
 For unattended generation inside WSL/Linux, use
-[configs/castellanismes_copilot.toml](configs/castellanismes_copilot.toml) and follow
+[configs/castellanismes_runners.toml](configs/castellanismes_runners.toml) and follow
 [the WSL setup guide](GETTING_STARTED.md#automated-copilot-cli-in-wsl). The `[runners.copilot]`
 section configures `workers` and the cumulative `max_calls`. It requires explicit
 `enabled = true` to allow automated calls that can incur costs; section presence alone

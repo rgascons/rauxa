@@ -3,21 +3,21 @@
 # No machine-specific executable paths or credentials belong in this file.
 
 [run]
-name = "castellanismes_copilot_10k"
-target_size = 10000
+name = "castellanismes_runners"
+target_size = 100
 seed = 1
 pool_multiplier = 1.2
 
 [runners.copilot]
 enabled = true
 workers = 4
-max_calls = 18000      # cumulative CLI invocations, including retries; safe to raise on resume
+max_calls = 500       # cumulative CLI invocations, including retries; safe to raise on resume
 
 [[sources]]
 type = "llm"
 task = "castellanismes_verbals"
 backend = "writer"
-count = 16000          # LLM candidate budget, not final dataset size
+count = 150           # LLM candidate budget, not final dataset size
 batch_size = 15
 max_fix_attempts = 2
 
@@ -34,7 +34,7 @@ on_error = "reject"
 
 [backends.writer]
 type = "agent"
-model = "gpt-6-astra"
+model = "gpt-5.4"
 timeout = 120
 max_retries = 3       # total attempts per request
 
