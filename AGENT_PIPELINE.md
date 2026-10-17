@@ -22,8 +22,10 @@ records that the run used an agent.
 For unattended generation inside WSL/Linux, use
 [configs/castellanismes_copilot.toml](configs/castellanismes_copilot.toml) and follow
 [the WSL setup guide](GETTING_STARTED.md#automated-copilot-cli-in-wsl). The `[copilot]` section
-sets `enabled`, `workers`, and the cumulative `max_calls`; CLI flags can override them.
-Executable selection is machine-local (`--copilot-command`, `RAUXA_COPILOT_BIN`, then PATH),
+enables dispatch and sets `workers` and the cumulative `max_calls`; `enabled = true` is
+unnecessary. Use `enabled = false` to retain settings without dispatch. There are no
+Copilot-specific CLI overrides.
+Executable selection is machine-local (`RAUXA_COPILOT_BIN`, then PATH),
 not committed TOML. Operational settings are excluded from the dataset fingerprint.
 
 In automatic mode, do not answer request files or run a second controller alongside the
@@ -33,8 +35,8 @@ Exit 3 means the call budget needs increasing; exit 130 means interrupted. Resum
 same dataset config and, if necessary, a larger operational cap. Effective settings and
 their origins are recorded in `dispatcher/events.jsonl` and the manifest.
 
-The instructions below describe the **manual** workflow. Use `--no-copilot` to choose it
-when the config enables automatic dispatch. Legacy manual runs remain manually resumable.
+The instructions below describe the **manual** workflow. Set `enabled = false` in `[copilot]`
+to choose it when the config enables automatic dispatch. Legacy manual runs remain manually resumable.
 
 ---
 

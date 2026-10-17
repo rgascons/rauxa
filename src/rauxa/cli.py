@@ -91,17 +91,12 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     try:
         config, copilot = load_settings(args.config)
-        settings = resolve_copilot(
-            copilot, enabled=args.copilot, workers=args.copilot_workers,
-            max_calls=args.copilot_max_calls, command=args.copilot_command,
-        )
+        settings = resolve_copilot(copilot)
         if settings.enabled:
             result = Dispatcher(config, settings, resume=args.resume).run()
         else:
             with Pipeline(config, resume=args.resume) as pipeline:
-                if copilot.specified or (config.run_dir() / "dispatcher").exists() or any(
-                    value is not None for value in (args.copilot, args.copilot_workers, args.copilot_max_calls, args.copilot_command)
-                ):
+                if copilot.section_present or (config.run_dir() / "dispatcher").exists():
                     Dispatcher(config, settings).record_disabled()
                 result = pipeline.run()
     except (KeyboardInterrupt, InterruptedError):
@@ -225,11 +220,6 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("run", help="run the generation pipeline from a TOML config")
     p.add_argument("config")
     p.add_argument("--resume", action="store_true", help="continue an interrupted run with the same config")
-    p.add_argument("--copilot", action=argparse.BooleanOptionalAction, default=None,
-                   help="override [copilot] enabled: automatically answer agent requests inside WSL/Linux")
-    p.add_argument("--copilot-workers", type=int, help="override [copilot] workers (default: 4)")
-    p.add_argument("--copilot-max-calls", type=int, help="override cumulative Copilot invocation cap, including retries")
-    p.add_argument("--copilot-command", help="Copilot executable (otherwise RAUXA_COPILOT_BIN, then PATH)")
     p.set_defaults(func=cmd_run)
 
     p = sub.add_parser("summary", help="show the results of a pipeline run, with sample pairs")

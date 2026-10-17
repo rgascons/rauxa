@@ -9,7 +9,6 @@ seed = 1
 pool_multiplier = 1.2
 
 [copilot]
-enabled = true
 workers = 4
 max_calls = 18000      # cumulative CLI invocations, including retries; safe to raise on resume
 

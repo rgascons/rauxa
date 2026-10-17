@@ -151,6 +151,7 @@ class CopilotConfig:
     workers: int = 4
     max_calls: Optional[int] = None
     specified: frozenset[str] = field(default_factory=frozenset, repr=False)
+    section_present: bool = field(default=False, repr=False)
 
     def validate(self) -> None:
         if type(self.enabled) is not bool:
@@ -182,35 +183,25 @@ class CopilotSettings:
 
 
 def resolve_copilot(
-    config: CopilotConfig, *, enabled: Optional[bool] = None, workers: Optional[int] = None,
-    max_calls: Optional[int] = None, command: Optional[str] = None,
-    environ: Optional[Mapping[str, str]] = None,
+    config: CopilotConfig, *, environ: Optional[Mapping[str, str]] = None,
 ) -> CopilotSettings:
     config.validate()
-    origins = {}
-    values = {}
-    for key, override in (("enabled", enabled), ("workers", workers), ("max_calls", max_calls)):
-        values[key] = getattr(config, key) if override is None else override
-        flag = "--copilot" if key == "enabled" else f"--copilot-{key.replace('_', '-')}"
-        origins[key] = f"cli:{flag}" if override is not None else (
-            f"toml:copilot.{key}" if key in config.specified else "default"
-        )
-    if enabled is False:
-        origins["enabled"] = "cli:--no-copilot"
-    effective = CopilotConfig(**values)
-    effective.validate()
-    if effective.enabled and effective.max_calls is None:
-        raise ValueError("automated dispatch requires copilot.max_calls or --copilot-max-calls")
+    origins = {
+        key: f"toml:copilot.{key}" if key in config.specified else "default"
+        for key in ("enabled", "workers", "max_calls")
+    }
+    if config.section_present and "enabled" not in config.specified:
+        origins["enabled"] = "toml:copilot"
+    if config.enabled and config.max_calls is None:
+        raise ValueError("automated dispatch requires copilot.max_calls")
     env = os.environ if environ is None else environ
-    if command is not None:
-        origins["command"] = "cli:--copilot-command"
-    elif "RAUXA_COPILOT_BIN" in env:
+    if "RAUXA_COPILOT_BIN" in env:
         command = env["RAUXA_COPILOT_BIN"]
         origins["command"] = "env:RAUXA_COPILOT_BIN"
     else:
         command = "copilot"
         origins["command"] = "path"
-    return CopilotSettings(effective.enabled, effective.workers, effective.max_calls, command, origins)
+    return CopilotSettings(config.enabled, config.workers, config.max_calls, command, origins)
 
 
 def _run_config(raw: dict[str, Any]) -> RunConfig:
@@ -239,9 +230,13 @@ def load_settings(path: str | Path) -> tuple[RunConfig, CopilotConfig]:
     if unknown:
         raise ValueError(
             f"unknown [copilot] keys: {sorted(unknown)}; executable selection belongs in "
-            "--copilot-command or RAUXA_COPILOT_BIN, not TOML"
+            "RAUXA_COPILOT_BIN, not TOML"
         )
-    copilot = CopilotConfig(**options, specified=frozenset(options))
+    section_present = "copilot" in raw
+    copilot = CopilotConfig(
+        **{"enabled": section_present, **options},
+        specified=frozenset(options), section_present=section_present,
+    )
     copilot.validate()
     return _run_config(raw), copilot
 

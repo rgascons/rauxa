@@ -43,7 +43,7 @@ class TestCopilotDispatch(unittest.TestCase):
         return resolve_copilot(
             CopilotConfig(enabled=True, workers=workers, max_calls=cap,
                           specified=frozenset(("enabled", "workers", "max_calls"))),
-            command=str(self.binary),
+            environ={"RAUXA_COPILOT_BIN": str(self.binary)},
         )
 
     def logs(self):
@@ -148,34 +148,43 @@ enabled = false
 type = "agent"
 model = "test-model"
 [copilot]
-enabled = true
 workers = 2
 max_calls = 1
 ''', encoding="utf-8")
         return config
 
-    def test_cli_toml_only_and_overrides(self):
+    def test_cli_toml_only_and_budget_changes(self):
         config = self.cli_config()
         output = StringIO()
         with patch.dict(os.environ, {"RAUXA_COPILOT_BIN": str(self.binary)}), redirect_stdout(output), redirect_stderr(output):
             self.assertEqual(main(["run", str(config)]), 3)
             self.assertEqual(main(["summary", str(self.root / "cli")]), 1)
-            self.assertEqual(main(["run", str(config), "--resume", "--copilot-max-calls", "2"]), 0)
+            config.write_text(config.read_text().replace("max_calls = 1", "max_calls = 2"))
+            self.assertEqual(main(["run", str(config), "--resume"]), 0)
             self.assertEqual(main(["summary", str(self.root / "cli"), "--samples", "0"]), 0)
         self.assertIn("env:RAUXA_COPILOT_BIN", output.getvalue())
-        self.assertIn("cli:--copilot-max-calls", output.getvalue())
+        self.assertIn("toml:copilot.max_calls", output.getvalue())
+        manifest = json.loads((self.root / "cli" / "manifest.json").read_text())
+        self.assertTrue(manifest["dispatcher"]["settings"]["enabled"])
+        self.assertEqual(manifest["dispatcher"]["settings"]["origins"]["enabled"], "toml:copilot")
+        history = list(read_records(self.root / "cli" / "dispatcher" / "events.jsonl"))
+        self.assertEqual([r["settings"]["max_calls"] for r in history if r["event"] == "settings"], [1, 2])
 
-    def test_no_copilot_and_dataset_fingerprint(self):
+    def test_disabled_copilot_and_dataset_fingerprint(self):
         config = self.cli_config()
+        config.write_text(config.read_text().replace("[copilot]\n", "[copilot]\nenabled = false\n"))
         output = StringIO()
         with redirect_stdout(output), redirect_stderr(output):
-            self.assertEqual(main(["run", str(config), "--no-copilot"]), 3)
+            self.assertEqual(main(["run", str(config)]), 3)
             self.assertFalse(self.events.exists())
             disabled = json.loads((self.root / "cli" / "dispatcher" / "status.json").read_text())
             self.assertEqual(disabled["status"], "disabled")
-            self.assertEqual(disabled["settings"]["origins"]["enabled"], "cli:--no-copilot")
+            self.assertEqual(disabled["settings"]["origins"]["enabled"], "toml:copilot.enabled")
             before = json.loads((self.root / "cli" / "state.json").read_text())["fingerprint"]
-            config.write_text(config.read_text().replace("workers = 2", "workers = 3").replace("max_calls = 1", "max_calls = 2"))
+            config.write_text(
+                config.read_text().replace("[copilot]\nenabled = false\n", "[copilot]\n")
+                .replace("workers = 2", "workers = 3").replace("max_calls = 1", "max_calls = 2")
+            )
             with patch.dict(os.environ, {"RAUXA_COPILOT_BIN": str(self.binary)}):
                 self.assertEqual(main(["run", str(config), "--resume"]), 0)
             after = json.loads((self.root / "cli" / "state.json").read_text())["fingerprint"]
