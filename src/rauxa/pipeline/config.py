@@ -109,6 +109,8 @@ class RunConfig:
     # Minimum share of the dataset per metadata field and value, e.g.
     # {"phenomenon": {"tenir_que": 0.25}, "format": {"gec": 0.2}}.
     min_share: dict[str, dict[str, float]] = field(default_factory=dict)
+    # Metadata field to balance the selection over, e.g. "phenomenon".
+    balance_by: Optional[str] = None
     # Models you will evaluate on this data; used to warn about same-family bias.
     evaluated_models: list[str] = field(default_factory=list)
 
@@ -136,7 +138,10 @@ class RunConfig:
 
     def fingerprint(self) -> str:
         """Hash of the configuration, used to refuse resuming a run with a different config."""
-        blob = json.dumps(asdict(self), sort_keys=True, ensure_ascii=False)
+        config = asdict(self)
+        if config["balance_by"] is None:  # unset: same fingerprint as before the option existed
+            del config["balance_by"]
+        blob = json.dumps(config, sort_keys=True, ensure_ascii=False)
         return hashlib.sha256(blob.encode()).hexdigest()[:16]
 
     def run_dir(self) -> Path:

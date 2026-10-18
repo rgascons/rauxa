@@ -158,8 +158,9 @@ def cmd_summary(args: argparse.Namespace) -> int:
         print("Failed checks: " + ", ".join(f"{k} {v}" for k, v in m["check_failures"].items()))
     if m["languagetool"]:
         print("LanguageTool flagged the incorrect sentence in:")
-        for phenomenon, lt in m["languagetool"].items():
-            print(f"  {phenomenon:<18} {lt['flag_rate']:.1%} of {lt['checked']}")
+        width = max(18, *(len(p) for p in m["languagetool"]))
+        for phenomenon, lt in sorted(m["languagetool"].items()):
+            print(f"  {phenomenon:<{width}} {lt['flag_rate']:>6.1%} of {lt['checked']}")
     for dim, rows in m["shares"]["fields"].items():
         print(f"Share by {dim}: " + ", ".join(f"{v} {r['share']:.1%}" for v, r in rows.items()))
     j = m["judge"]

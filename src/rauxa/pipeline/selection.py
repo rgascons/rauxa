@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import math
 from random import Random
-from typing import Any
+from typing import Any, Optional
 
 from ..formats import normalize_sentence
 
@@ -47,12 +47,29 @@ def share_report(items: list[dict[str, Any]], min_share: dict[str, dict[str, flo
     return report
 
 
+def _interleave(pool: list[dict[str, Any]], dim: str) -> list[dict[str, Any]]:
+    """Reorder ``pool`` round-robin over the values of ``dim``, keeping the order within each value."""
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for entry in pool:
+        groups.setdefault(_value(entry, dim), []).append(entry)
+    longest = max((len(g) for g in groups.values()), default=0)
+    return [g[i] for i in range(longest) for g in groups.values() if i < len(g)]
+
+
 def select(
-    pool: list[dict[str, Any]], target: int, min_share: dict[str, dict[str, float]], rng: Random
+    pool: list[dict[str, Any]], target: int, min_share: dict[str, dict[str, float]], rng: Random,
+    balance_by: Optional[str] = None,
 ) -> list[dict[str, Any]]:
-    """Pick up to ``target`` items: first enough to meet every minimum share, then the rest at random."""
+    """Pick up to ``target`` items: first enough to meet every minimum share, then the rest at random.
+
+    With ``balance_by``, items are taken round-robin over the values of that metadata field, so
+    each value gets as even a count as the pool allows. Without it, a value with more distinct
+    items (more template combinations) ends up with a larger share.
+    """
     pool = list(pool)
     rng.shuffle(pool)
+    if balance_by:
+        pool = _interleave(pool, balance_by)
     need = {
         (dim, value): math.ceil(share * target)
         for dim, minimums in min_share.items()
