@@ -611,7 +611,7 @@ class Pipeline:
             (kept if ok else rejected).append(annotated)
 
         target = self.cfg.target_size
-        selected = select(kept, target, self.cfg.min_share, Random(self.cfg.seed))
+        selected = select(kept, target, self.cfg.min_share, Random(self.cfg.seed), self.cfg.balance_by)
         shares = share_report(selected, self.cfg.min_share, target)
         status = "complete" if len(selected) == target and shares["ok"] else "incomplete"
         for name in (COMPLETE_FILE, INCOMPLETE_FILE):

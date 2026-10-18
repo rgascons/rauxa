@@ -62,7 +62,7 @@ Besides normative pairs, a task can produce two other kinds of item (`metadata.k
 | `control` | One valid sentence, e.g. a legitimate use of a suspect word or an accepted loan. Measures false positives and overcorrection (in `gec`, the right answer is to leave it unchanged) | `judgement`, `gec` |
 
 Any item can carry a `context` shown before it, to fix the intended meaning. `castellanismes_verbals`
-produces plain pairs only.
+produces plain pairs only; `anglicismes` produces all three kinds.
 
 ## Pipeline
 
@@ -200,6 +200,7 @@ Every command takes `--help`. Without installing, run `export PYTHONPATH=src` an
 | Task | Phenomena |
 |---|---|
 | `castellanismes_verbals` | `tenir_que` (→ *haver de*), `hi_ha_que` (→ *cal* / *s'ha de*), `donar_se_compte` (→ *adonar-se*) |
+| `anglicismes` | The 45 accepted entries of the [reviewed catalog](src/rauxa/tasks/data/anglicismes_catalog.toml): English words (*screenshot* → *captura de pantalla*, *scanner* → *escàner*), English senses (*realitzar* → *adonar-se*, *sever* → *greu*) and constructions (*resultar en*, gerundi especificatiu, passiva amb el datiu). Normative errors become pairs, formal-register preferences become preferences, and legitimate uses (*realitzar un projecte*, *pàgina web*) become controls |
 
 Only the IEC (central) norm is implemented; `norm="avl"` raises `NotImplementedError`.
 

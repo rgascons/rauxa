@@ -17,5 +17,7 @@ if task == "castellanismes_verbals":
 
 for entry in rauxa.create_dataset(task, **kwargs):
     m = entry["metadata"]
-    print(f"{m['source_index']:>4} {m['phenomenon']:<16} {m['tense']:<17} ✓ {m['sentence_good']}")
-    print(f"{'':>4} {'':<16} {'':<17} ✗ {m['sentence_bad']}")
+    detail = m.get("tense") or m.get("kind", "")
+    print(f"{m['source_index']:>4} {m['phenomenon']:<26} {detail:<17} ✓ {m['sentence_good']}")
+    if m.get("sentence_bad"):
+        print(f"{'':>4} {'':<26} {'':<17} ✗ {m['sentence_bad']}")

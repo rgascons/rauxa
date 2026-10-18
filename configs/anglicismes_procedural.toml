@@ -1,0 +1,53 @@
+# Anglicismes, procedural generator only, no LLM: 10k items from the reviewed catalog
+# (src/rauxa/tasks/data/anglicismes_catalog.toml). The automatic checks include a local
+# LanguageTool server:
+#   java -cp languagetool-server.jar org.languagetool.server.HTTPServer --port 8081
+
+[run]
+name = "anglicismes_procedural"
+target_size = 10000
+seed = 1
+# Entries differ in how many distinct sentences their frames allow; a larger pool and
+# balancing keep the ones with many combinations from taking over the dataset.
+pool_multiplier = 1.6
+balance_by = "phenomenon"
+
+[[sources]]
+type = "procedural"
+task = "anglicismes"
+
+# Pairs get the rest (0.80). Preferences are mcq only; controls are judgement or gec.
+[sources.params]
+formats = ["mcq", "judgement", "gec"]
+preference_share = 0.08
+control_share = 0.12
+
+[checks]
+orthography = true
+marker = true
+minimal_pair = true
+
+# LanguageTool covers most lexical entries but few semantic or syntactic ones, so an
+# unflagged incorrect sentence is expected and doesn't reject the item.
+[checks.languagetool]
+enabled = true
+url = "http://localhost:8081"
+require_bad_flagged = false
+
+[judge]
+enabled = false
+
+[min_share.kind]
+pair = 0.7
+preference = 0.06
+control = 0.1
+
+[min_share.category]
+lexical = 0.4
+semantic = 0.15
+syntactic = 0.12
+
+[min_share.format]
+mcq = 0.25
+judgement = 0.25
+gec = 0.25

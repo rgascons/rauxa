@@ -35,7 +35,7 @@ The pipeline works in rounds:
    (split by `weight`) and the next round starts.
 5. The run stops when the goal is met, after `max_rounds` rounds, or when no source can make
    anything new. Then `target_size` pairs are **selected** from the pool: first enough to cover
-   each minimum share, then the rest at random.
+   each minimum share, then the rest at random (or evenly over a field, with `balance_by`).
 
 The result is `dataset.jsonl` if the target size and every minimum share were met, and
 `dataset.incomplete.jsonl` otherwise.
@@ -58,6 +58,7 @@ The result is `dataset.jsonl` if the target size and every minimum share were me
 | `output_dir` | `"out/runs"` | Where run folders go |
 | `pool_multiplier` | `1.3` | Kept pairs to aim for before selecting, as a multiple of `target_size` (must be ≥ 1). The spare pairs give selection room to meet the minimum shares and to draw at random |
 | `max_rounds` | `5` | Make → check → judge rounds before giving up and writing what there is |
+| `balance_by` | none | A metadata field, e.g. `"phenomenon"`. Selection then takes pairs round-robin over its values, so each gets as even a count as the pool allows. Without it, a phenomenon with more distinct pairs (more template combinations) ends up with a larger share, because duplicates of the others are dropped |
 | `max_draws_per_round` | `200000` | How many procedural indices a source may try in one round without finding a new unique pair before it is marked exhausted (out of combinations) |
 | `evaluated_models` | `[]` | Models you will evaluate on this data. Used only for the manifest warning when they share a model family with the writer or judge |
 
@@ -98,6 +99,21 @@ in `[sources.params]`.
 | `norm` | `"iec"` | Only `iec` is implemented |
 
 Note that the default `formats` here is `["mcq"]`, unlike LLM sources, whose default is all three.
+
+`[sources.params]` for `anglicismes`:
+
+| Key | Default | Values |
+|---|---|---|
+| `phenomena` | all | Catalog ids of accepted entries, e.g. `lex.screenshot`, `sem.sever`, `syn.resultar_en` |
+| `categories` | all | `lexical`, `semantic`, `syntactic` |
+| `kinds` | all | `pair`, `preference`, `control` |
+| `formats` | `["mcq", "judgement", "gec"]` | Each item gets one its kind allows: preferences are `mcq` only, controls `judgement` or `gec` |
+| `preference_share` | `0.08` | Share of preference items. Pairs get what preferences and controls leave |
+| `control_share` | `0.12` | Share of control items |
+| `norm` | `"iec"` | Only `iec` is implemented |
+
+A kind is left out when no selected phenomenon or format allows it: with `formats = ["mcq"]`
+there are no controls. Use `[min_share.kind]` and `[min_share.category]` to require a balance.
 
 ### LLM sources (`type = "llm"`)
 
