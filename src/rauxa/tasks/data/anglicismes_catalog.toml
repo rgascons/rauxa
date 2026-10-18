@@ -1,0 +1,864 @@
+# Anglicismes catalog — reviewed 2026-10-18. Not yet used by code.
+#
+# Each entry has a review status: "accepted" (used by the anglicismes task), "rejected" (kept with
+# `rejection_reason` so it isn't re-added from LanguageTool later) or "proposed" (awaiting a decision).
+#
+# Target register: formal Catalan, IEC norm.
+#
+# ASSESSMENT POLICY (confirmed in review, 2026-10-18)
+#   normative_error  An authority (DIEC, Optimot, TERMCAT) states the form is inadequate; or the
+#                    English form/sense is absent from DIEC AND an authority attests a Catalan
+#                    term for the concept. Becomes `pair` items.
+#   style_preference An authority admits both forms but recommends one for formal registers.
+#                    Becomes `preference` items, never presented as an error.
+#   accepted         DIEC or TERMCAT includes the form. Becomes `control` items.
+#   disputed         Sources conflict. Not used for pairs until the reviewer decides.
+#
+# EVIDENCE LEVEL (how strong the case is, separate from the assessment)
+#   explicit   An authority says so in words (quoted in `evidence`).
+#   inferred   DIEC lacks the form/sense, a Catalan term is attested, and LanguageTool flags the
+#              English one. No authority says "incorrect" in words.
+#   disputed   At least one source points the other way (see `evidence`).
+#
+# English origin alone never makes a form an error: see the controls and the disputed entries.
+#
+# SOURCES AND REUSE
+#   LanguageTool replace_anglicism.txt and grammar.xml at commit
+#   38a903c9037cd04359cb92a13d94386ffb3eca30 (LGPL-2.1): used only to find candidates.
+#   Optimot (Generalitat de Catalunya), which also serves DIEC2 and TERMCAT records: reuse is
+#   allowed "sempre que se'n citi la font i la data d'actualització" (Llei 19/2014, art. 17.1).
+#   We store record ids, short quotes and our own rationale, never copied example collections.
+#   Retrieved 2026-10-17. Detail URL pattern:
+#   https://aplicacions.llengua.gencat.cat/llc/AppJava/index.html?action=Principal&method=detall&database={DIEC|FITXES_PUB|TERMCAT}&idFont={id}&idHit={id}
+
+[meta]
+version = "0.1"
+reviewed = "2026-10-18"
+retrieved = "2026-10-17"
+languagetool_commit = "38a903c9037cd04359cb92a13d94386ffb3eca30"
+
+# =========================================================================================
+# LEXICAL — unadapted English forms with an attested Catalan term
+# =========================================================================================
+
+[[phenomenon]]
+id = "lex.screenshot"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "explicit"
+english = ["screenshot", "screenshots"]
+alternatives = [{ form = "captura de pantalla", gender = "f", plural = "captures de pantalla" }]
+scope = "Copy of what a screen displays at a given moment (computing)."
+evidence = [
+  { source = "Optimot fitxa", id = "FITXES_PUB:15722", title = "Com es diu screenshot en català?", quote = "el terme que serveix per designar la còpia del contingut que es visualitza a la pantalla [...] és captura de pantalla" },
+  { source = "DIEC2", note = "no entry for screenshot" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:94" },
+]
+
+[[phenomenon]]
+id = "lex.email"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "explicit"
+english = ["e-mail", "email", "e-mails", "emails"]
+alternatives = [
+  { form = "correu electrònic", gender = "m", plural = "correus electrònics", sense = "system or message" },
+  { form = "missatge electrònic", gender = "m", plural = "missatges electrònics", sense = "message" },
+  { form = "adreça electrònica", gender = "f", plural = "adreces electròniques", sense = "address" },
+]
+scope = "Electronic mail: the system, a message, or an address. The alternative depends on the sense."
+evidence = [
+  { source = "Optimot fitxa", id = "FITXES_PUB:8739", title = "Com es diu e-mail o email en català?", quote = "L'ús de l'anglicisme electronic mail, o les variants abreujades e-mail o email, no és adequat per designar tots aquests conceptes." },
+  { source = "DIEC2", note = "no entry for e-mail" },
+]
+notes = "Not in LanguageTool's replace list; the fitxa is the strongest explicit source in this catalog. Templates must pick the alternative matching the sense."
+
+[[phenomenon]]
+id = "lex.bullying"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "explicit"
+english = ["bullying"]
+alternatives = [{ form = "assetjament escolar", gender = "m", mass = true }]
+scope = "Systematic physical or psychological abuse of a pupil by schoolmates. Outside school, 'assetjament' alone."
+evidence = [
+  { source = "Optimot fitxa", id = "FITXES_PUB:15914", title = "Com es diu bullying en català?", quote = "En l'àmbit escolar, l'equivalent català de la paraula anglesa bullying és assetjament escolar." },
+  { source = "DIEC2", note = "no entry for bullying" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:120" },
+]
+
+[[phenomenon]]
+id = "lex.coffee_break"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "explicit"
+english = ["coffee break", "coffee-break"]
+alternatives = [{ form = "pausa", gender = "f", plural = "pauses" }]
+scope = "Short break during a congress or work session, possibly with refreshments."
+evidence = [
+  { source = "Optimot fitxa", id = "FITXES_PUB:11895", title = "Com es diu 'coffee break' en català?", quote = "el terme que serveix per designar el descans breu que es fa en el decurs d'un congrés [...] és pausa" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:164" },
+]
+
+[[phenomenon]]
+id = "lex.feedback"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "explicit"
+english = ["feedback"]
+alternatives = [
+  { form = "retroacció", gender = "f", mass = true, sense = "technical/pedagogical" },
+  { form = "comentaris", gender = "m", number = "pl", singular = "comentari", sense = "general" },
+  { form = "retorn", gender = "m", plural = "retorns", sense = "general" },
+  { form = "resposta", gender = "f", plural = "respostes", sense = "general" },
+]
+scope = "Information returned about the result of an action. In general language, 'retroacció' is correct but stilted; prefer the general alternatives."
+evidence = [
+  { source = "Optimot fitxa", id = "FITXES_PUB:13537", title = "Com es diu feedback en català?", quote = "L'anglicisme feedback, malgrat que és d'ús habitual, no s'accepta des del punt de vista normatiu." },
+  { source = "Optimot fitxa", id = "FITXES_PUB:13537", quote = "En contextos de llengua general, es poden fer servir altres alternatives, segons el cas: resposta, reacció, impressió, sensació, suggeriment, retorn, etc." },
+  { source = "DIEC2", note = "no entry for feedback" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:485" },
+]
+
+[[phenomenon]]
+id = "lex.online"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+english = ["online", "on-line", "on line"]
+alternatives = [{ form = "en línia", invariable = true }]
+scope = "Carried out over the internet (adjectival/adverbial). 'digital', 'per internet' are context alternatives."
+evidence = [
+  { source = "TERMCAT", id = "TERMCAT:3666129", note = "en línia: 'Que se sosté o es desenvolupa per mitjà d'internet.'" },
+  { source = "DIEC2", note = "no entry for online" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:131" },
+]
+
+[[phenomenon]]
+id = "lex.offline"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+english = ["offline", "off-line", "off line"]
+alternatives = [{ form = "fora de línia", invariable = true }]
+scope = "Not connected / not controlled by a system."
+evidence = [
+  { source = "TERMCAT", note = "fora de línia (TIC; Economia. Empresa)" },
+  { source = "DIEC2", note = "no entry for offline" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:132" },
+]
+
+[[phenomenon]]
+id = "lex.smartphone"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+english = ["smartphone", "smartphones"]
+alternatives = [{ form = "telèfon intel·ligent", gender = "m", plural = "telèfons intel·ligents" }]
+scope = "Mobile phone with an operating system for apps."
+evidence = [
+  { source = "TERMCAT", note = "telèfon intel·ligent (TIC): 'Telèfon mòbil que incorpora un sistema operatiu per a la descàrrega d'aplicacions...'" },
+  { source = "DIEC2", note = "no entry for smartphone" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:139" },
+]
+notes = "In everyday writing 'mòbil' is often the natural choice; templates should accept it where the context allows."
+
+[[phenomenon]]
+id = "lex.website"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+english = ["website", "websites"]
+alternatives = [{ form = "lloc web", gender = "m", plural = "llocs web" }]
+scope = "Set of web pages published by an organisation or person."
+evidence = [
+  { source = "TERMCAT", note = "lloc web (Economia. Empresa)" },
+  { source = "Optimot fitxa", id = "FITXES_PUB:15965", title = "web, pàgina web i lloc web", note = "distinguishes web / pàgina web / lloc web" },
+  { source = "DIEC2", note = "no entry for website; 'web' is an entry (see acc.web)" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:154" },
+]
+
+[[phenomenon]]
+id = "lex.startup"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+english = ["startup", "start-up", "startups", "start-ups"]
+alternatives = [{ form = "empresa emergent", gender = "f", plural = "empreses emergents" }]
+scope = "Young, usually small, fast-growing technology company."
+evidence = [
+  { source = "TERMCAT", note = "empresa emergent (Economia. Empresa; TIC)" },
+  { source = "DIEC2", note = "no entry for startup" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:151" },
+]
+
+[[phenomenon]]
+id = "lex.stakeholder"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+english = ["stakeholder", "stakeholders"]
+alternatives = [{ form = "part interessada", gender = "f", plural = "parts interessades" }]
+scope = "Person or group with a stake or interest in an organisation."
+evidence = [
+  { source = "TERMCAT", note = "part interessada (Treball): 'Persona o grup de persones que tenen accions o interessos en una empresa.'" },
+  { source = "DIEC2", note = "no entry for stakeholder" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:146" },
+]
+
+[[phenomenon]]
+id = "lex.coworking"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+english = ["coworking"]
+alternatives = [{ form = "cotreball", gender = "m", mass = true }, { form = "espai de cotreball", gender = "m", plural = "espais de cotreball", sense = "the place" }]
+scope = "Independent professionals sharing a workspace; or the place itself."
+evidence = [
+  { source = "TERMCAT", note = "cotreball; espai de cotreball (Ciències socials)" },
+  { source = "DIEC2", note = "no entry for coworking" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:24" },
+]
+
+[[phenomenon]]
+id = "lex.spam"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+english = ["spam"]
+alternatives = [{ form = "correu brossa", gender = "m", mass = true }]
+scope = "Unsolicited, usually advertising, email."
+evidence = [
+  { source = "TERMCAT", note = "correu brossa (TIC): 'Correu electrònic sense interès per al receptor i generalment amb finalitat publicitària.'" },
+  { source = "DIEC2", note = "no entry for spam" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:22" },
+]
+
+[[phenomenon]]
+id = "lex.clickbait"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+english = ["clickbait"]
+alternatives = [{ form = "pescaclics", gender = "m", invariable = true }]
+scope = "Low-quality web content with an eye-catching title designed to get clicks."
+evidence = [
+  { source = "TERMCAT", note = "pescaclics (Comunicació. Audiovisuals; Economia. Empresa)" },
+  { source = "DIEC2", note = "no entry for clickbait" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:162" },
+]
+
+[[phenomenon]]
+id = "lex.target"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+english = ["target"]
+alternatives = [{ form = "públic objectiu", gender = "m", plural = "públics objectiu" }]
+scope = "Marketing/communication sense only: the audience a product or campaign is aimed at."
+evidence = [
+  { source = "TERMCAT", note = "públic objectiu (Economia. Empresa): 'Conjunt de consumidors o usuaris per als quals es pensa un producte o un servei.'" },
+  { source = "DIEC2", note = "no entry for target" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:153", note = "also suggests blanc|diana|objectiu for other senses" },
+]
+notes = "TERMCAT also has TARGET as the name of a European payment system (proper noun): a natural control."
+
+[[phenomenon]]
+id = "lex.know_how"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+english = ["know-how", "know how"]
+alternatives = [{ form = "saber fer", gender = "m", mass = true }]
+scope = "Technical competence and practical knowledge from experience."
+evidence = [
+  { source = "TERMCAT", note = "saber fer (Ciències socials; Economia. Empresa; Indústria. Energia)" },
+  { source = "DIEC2", note = "no entry for know-how" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:122" },
+]
+
+[[phenomenon]]
+id = "lex.merchandising"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+english = ["merchandising"]
+alternatives = [
+  { form = "marxandatge", gender = "m", mass = true, sense = "point-of-sale techniques" },
+  { form = "productes de marxandatge", gender = "m", number = "pl", singular = "producte de marxandatge", sense = "branded goods (band, club, event)" },
+  { form = "articles promocionals", gender = "m", number = "pl", singular = "article promocional", sense = "branded goods (band, club, event)" },
+]
+scope = "Point-of-sale promotion techniques, or branded goods (merch). DIEC's 'marxandatge' sense is the dealer-artist relationship; TERMCAT has the commercial sense."
+evidence = [
+  { source = "TERMCAT", note = "marxandatge (Economia. Empresa): 'Conjunt de tècniques i accions dutes a terme en el punt de venda...'" },
+  { source = "DIEC2", note = "no entry for merchandising; 'marxandatge' entry has a different (art-dealer) sense" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:128" },
+]
+notes = "Two senses with different alternatives: point-of-sale techniques (TERMCAT: marxandatge) and branded goods sold by a band, club or event (productes de marxandatge, articles promocionals; added per review). Templates must pick the alternative matching the sense."
+
+[[phenomenon]]
+id = "lex.lockdown"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+english = ["lockdown"]
+alternatives = [{ form = "confinament", gender = "m", plural = "confinaments" }]
+scope = "Restriction of a population to a limited space for public-health or safety reasons."
+evidence = [
+  { source = "TERMCAT", note = "confinament (Ciències de la salut)" },
+  { source = "DIEC2", note = "no entry for lockdown; 'confinament' is an entry" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:125" },
+]
+
+[[phenomenon]]
+id = "lex.link"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+english = ["link", "links", "hyperlink"]
+alternatives = [{ form = "enllaç", gender = "m", plural = "enllaços" }]
+scope = "Hypertext link."
+evidence = [
+  { source = "TERMCAT", note = "enllaç (TIC): 'Element en un document, generalment d'hipertext, que permet de connectar amb altres documents...'" },
+  { source = "DIEC2", note = "no entry for link" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:104" },
+]
+
+[[phenomenon]]
+id = "lex.password"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+english = ["password", "passwords"]
+alternatives = [{ form = "contrasenya", gender = "f", plural = "contrasenyes" }]
+scope = "Secret code giving access to a system."
+evidence = [
+  { source = "DIEC2", note = "contrasenya includes 'Paraula o conjunt de paraules que donen accés a determinades actuacions'; no entry for password" },
+  { source = "TERMCAT", note = "contrasenya: 'Codi secret utilitzat per a restringir l'accés als usuaris autoritzats.'" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:279" },
+]
+
+[[phenomenon]]
+id = "lex.deadline"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+english = ["deadline", "deadlines"]
+alternatives = [{ form = "termini", gender = "m", plural = "terminis" }, { form = "data límit", gender = "f", plural = "dates límit" }]
+scope = "Time limit for completing something."
+evidence = [
+  { source = "DIEC2", note = "termini: 'Terme o temps assenyalat per a alguna cosa, especialment per a la finalització...'; no entry for deadline" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:90" },
+]
+
+[[phenomenon]]
+id = "lex.timeline"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+english = ["timeline", "time line", "time-line"]
+alternatives = [{ form = "cronologia", gender = "f", plural = "cronologies" }, { form = "línia de temps", gender = "f", plural = "línies de temps" }]
+scope = "Chronological sequence of events (DIEC 'cronologia' sense 2); also a social-media feed (TERMCAT)."
+evidence = [
+  { source = "DIEC2", note = "cronologia: 'Sèrie ordenada temporalment dels esdeveniments relatius a un succés o fenomen.'" },
+  { source = "TERMCAT", note = "cronologia (TIC): Twitter home timeline" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:171" },
+]
+
+[[phenomenon]]
+id = "lex.workshop"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+english = ["workshop", "workshops"]
+alternatives = [{ form = "taller", gender = "m", plural = "tallers" }, { form = "seminari", gender = "m", plural = "seminaris" }, { form = "jornada", gender = "f", plural = "jornades" }]
+scope = "Practical learning session (DIEC 'taller': 'Activitat lúdica o d'aprenentatge...')."
+evidence = [
+  { source = "DIEC2", note = "taller includes 'Activitat lúdica o d'aprenentatge on un grup de persones aprenen i experimenten...'" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:169" },
+]
+
+# --- accepted loans: correct as they are; only used as controls ---------------------------
+
+[[phenomenon]]
+id = "acc.web"
+category = "lexical"
+status = "accepted"
+assessment = "accepted"
+evidence_level = "explicit"
+english = ["web"]
+scope = "The web as a system ('el web'), and in 'pàgina web', 'lloc web'. A model that 'corrects' it is overcorrecting."
+evidence = [
+  { source = "Optimot fitxa", id = "FITXES_PUB:15965", title = "web, pàgina web i lloc web / el web o la web?", quote = "El terme normatiu web designa el sistema basat en l'hipertext que permet cercar informació a internet" },
+  { source = "DIEC2", note = "entry: web ('Sistema basat en l'ús de l'hipertext, que permet cercar informació a internet.')" },
+]
+controls = ["Hem publicat l'informe al nostre lloc web.", "Podeu consultar el document a la pàgina web de l'ajuntament."]
+
+# --- adaptations: the unadapted spelling is the error; the adapted loan is accepted --------
+
+[[phenomenon]]
+id = "lex.adapt.scanner"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "explicit"
+english = ["scanner", "scanners"]
+alternatives = [{ form = "escàner", gender = "m", plural = "escàners" }]
+scope = "Unadapted spelling of an accepted loan."
+evidence = [
+  { source = "DIEC2", note = "entry: escàner" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:29", note = "'Podeu usar la grafia adaptada d'aquest anglicisme.'" },
+]
+controls = ["Hem comprat un escàner nou per a l'oficina.", "Passa el document per l'escàner abans d'enviar-lo."]
+
+[[phenomenon]]
+id = "lex.adapt.stress"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "explicit"
+english = ["stress"]
+alternatives = [{ form = "estrès", gender = "m", plural = "estressos" }]
+scope = "Unadapted spelling of an accepted loan. (LanguageTool also lists 'estrés', the Valencian form: out of scope for the IEC target.)"
+evidence = [
+  { source = "Optimot fitxa", title = "Com es diu stress en català?", quote = "El mot anglès stress s'ha adaptat al català amb la forma estrès." },
+  { source = "Optimot fitxa", id = "FITXES_PUB:7438", title = "estrès (plural)", quote = "El plural de estrès és estressos." },
+  { source = "DIEC2", note = "entry: estrès" },
+]
+controls = ["L'estrès laboral afecta molts treballadors.", "Els exàmens li provoquen molt d'estrès."]
+
+[[phenomenon]]
+id = "lex.adapt.leader"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "explicit"
+english = ["leader", "leaders"]
+alternatives = [{ form = "líder", gender = "m/f", plural = "líders" }]
+scope = "Unadapted spelling of an accepted loan."
+evidence = [
+  { source = "DIEC2", note = "entry: líder ('Cap d'un partit polític, d'una associació...')" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:36" },
+]
+controls = ["La líder del partit va fer un discurs llarg.", "L'equip continua líder de la classificació."]
+
+[[phenomenon]]
+id = "lex.adapt.podcast"
+category = "lexical"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+english = ["podcast", "podcasts"]
+alternatives = [{ form = "pòdcast", gender = "m", plural = "pòdcasts" }]
+scope = "Unadapted spelling. 'pòdcast' is in TERMCAT but not in DIEC2."
+evidence = [
+  { source = "TERMCAT", note = "pòdcast (TIC; Ciències de la salut; Comunicació. Audiovisuals)" },
+  { source = "DIEC2", note = "no entry for pòdcast or podcast" },
+  { source = "LanguageTool", ref = "replace_anglicism.txt:40" },
+  { source = "Reviewer", note = "Approved by TERMCAT's Consell Supervisor (with IEC representation) and in Optimot. Record id not yet added to this catalog." },
+]
+notes = "Kept as normative_error per review (Consell Supervisor approval). Add the record id when available."
+
+# =========================================================================================
+# SEMANTIC — Catalan words used in an English sense
+# =========================================================================================
+
+[[phenomenon]]
+id = "sem.realitzar_adonar"
+category = "semantic"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "explicit"
+target = "realitzar"
+english_sense = "realize = become aware of"
+alternatives = [{ form = "adonar-se", construction = "adonar-se que / adonar-se de" }, { form = "copsar" }]
+scope = "Only the awareness sense. 'Realitzar un projecte' (acomplir) and 'realitzar-se' (self-fulfilment) are correct."
+evidence = [
+  { source = "DIEC2", id = "DIEC:5304", note = "senses: acomplir; realitzar-se; actualitzar; convertir en moneda — no awareness sense" },
+  { source = "Franquesa (Enciclopèdia Catalana)", quote = "En el sentit de veure o copsar l'abast d'una cosa, realitzar és anglicisme." },
+  { source = "Optimot fitxa", id = "FITXES_PUB:15912", title = "realitzar o fer?", note = "separate style point: don't overuse realitzar for fer. Not about the anglicism." },
+]
+controls = ["Van realitzar el projecte en sis mesos.", "Té una feina que li permet realitzar-se professionalment."]
+notes = "The explicit statement is from Franquesa (Enciclopèdia Catalana), not an IEC text. The realitzar/fer overuse point could become a separate style_preference entry."
+
+[[phenomenon]]
+id = "sem.sever"
+category = "semantic"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+target = "sever"
+english_sense = "severe = serious, intense (weather, illness, damage)"
+alternatives = [{ form = "greu", sense = "illness, damage" }, { form = "intens / fort", sense = "weather" }]
+scope = "Only for intensity/seriousness. 'Un mestre sever', 'un estil sever' are correct."
+evidence = [
+  { source = "DIEC2", id = "DIEC:85226", note = "senses: not indulgent; strict, rigid; austere (estil sever) — no intensity sense" },
+  { source = "LanguageTool", ref = "grammar.xml rule SEVER", note = "'\"sever\" pot ser un calc inapropiat de l'anglès'" },
+]
+controls = ["Era un mestre sever amb els seus alumnes.", "L'edifici té un estil sever."]
+
+[[phenomenon]]
+id = "sem.projectar_preveure"
+category = "semantic"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+target = "projectar"
+english_sense = "project = forecast"
+alternatives = [{ form = "preveure" }, { form = "calcular" }, { form = "pronosticar" }]
+scope = "Only the forecasting sense. Projecting light/images and planning a construction are correct."
+evidence = [
+  { source = "DIEC2", id = "DIEC:77587", note = "senses: throw forward; cast light/shadow; project images; geometric projection; design a construction — no forecasting sense" },
+  { source = "LanguageTool", ref = "grammar.xml rule PROJECTAR", note = "'amb el sentit de \"preveure\" és un calc de l'anglès no recomanable'" },
+]
+controls = ["Van projectar la pel·lícula al pati.", "L'arquitecta va projectar l'edifici."]
+
+[[phenomenon]]
+id = "sem.eventualment_finalment"
+category = "semantic"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+target = "eventualment"
+english_sense = "eventually = in the end"
+alternatives = [{ form = "finalment" }, { form = "al final" }, { form = "amb el temps" }]
+scope = "Only when it means 'in the end'. 'Eventualment' = occasionally/possibly is correct."
+evidence = [
+  { source = "DIEC2", id = "DIEC:64049", note = "'D'una manera eventual' only" },
+  { source = "Franquesa (Enciclopèdia Catalana)", note = "synonyms: contingentment, fortuïtament, ocasionalment, aleatòriament, casualment, possiblement — none means 'finally'" },
+]
+controls = ["La neu es pot mantenir i, eventualment, esdevenir glaç."]
+notes = "No LanguageTool rule and no explicit authority statement; the case rests on DIEC's single sense plus the synonym list."
+
+[[phenomenon]]
+id = "sem.aplicar_sollicitar"
+category = "semantic"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+target = "aplicar"
+english_sense = "apply for (a job, a grant)"
+alternatives = [{ form = "sol·licitar" }, { form = "presentar-se a", sense = "a job, a competition" }, { form = "optar a" }]
+scope = "Only 'aplicar a/per a una feina, una beca'. Applying a treatment, a rule, a force is correct."
+evidence = [
+  { source = "DIEC2", id = "DIEC:6834", note = "senses: put on; make act upon (tractament, pena, procediment); use for; aplicar-se = make an effort — no 'apply for'" },
+]
+controls = ["Van aplicar el nou procediment a tots els casos.", "La Maria s'aplica molt a la feina."]
+notes = "Weakest semantic case (DIEC absence only, no LanguageTool rule). Kept per review: 'aplicar a una feina/beca' is an unambiguous calque."
+
+[[phenomenon]]
+id = "sem.assumir_suposar"
+category = "semantic"
+status = "rejected"
+rejection_reason = "In formal and scientific prose, 'assumir que...' (accept as a premise) is too close to standard usage, and ésAdir admits it; DIEC's silence is not enough."
+assessment = "normative_error"
+evidence_level = "inferred"
+target = "assumir"
+english_sense = "assume = suppose"
+alternatives = [{ form = "suposar" }, { form = "donar per fet" }]
+scope = "Only the supposing sense. Taking on a responsibility, a role, consequences is correct."
+evidence = [
+  { source = "DIEC2", id = "DIEC:45369", note = "'Prendre sobre si mateix [...] (un honor, un càrrec, una obligació, una responsabilitat)' only" },
+]
+controls = ["Va assumir la presidència de l'entitat.", "Cal assumir les conseqüències."]
+notes = "Rejected in review: see rejection_reason."
+
+[[phenomenon]]
+id = "sem.condicio_malaltia"
+category = "semantic"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+target = "condició"
+english_sense = "condition = illness, disorder"
+alternatives = [{ form = "malaltia" }, { form = "afecció" }, { form = "trastorn" }]
+scope = "Only the medical sense. Circumstance, requirement, social status are correct."
+evidence = [
+  { source = "DIEC2", id = "DIEC:15444", note = "senses: essential circumstance; condition in an agreement; legal; social status — no illness sense" },
+  { source = "LanguageTool", ref = "grammar.xml rule CONDICIO", note = "'Calc de l'anglès si vol dir malaltia.'" },
+]
+controls = ["Ho farem a condició que tothom hi estigui d'acord.", "Estava en bones condicions per a reeixir."]
+
+[[phenomenon]]
+id = "sem.allegat_presumpte"
+category = "semantic"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+target = "al·legat"
+english_sense = "alleged = presumed (adjective)"
+alternatives = [{ form = "presumpte" }, { form = "suposat" }]
+scope = "Only the adjective before a noun ('les al·legades irregularitats'). The noun 'al·legat' (a legal plea) is correct."
+evidence = [
+  { source = "DIEC2", id = "DIEC:531", note = "noun only: 'Exposició de les raons en què es fonamenta alguna cosa.'" },
+  { source = "LanguageTool", ref = "grammar.xml rule ALLEGAT_PRESUMPTE", note = "'És un calc de l'anglès en el sentit de suposar.'" },
+]
+controls = ["L'advocat va presentar un al·legat molt sòlid."]
+
+[[phenomenon]]
+id = "sem.replicar_repetir"
+category = "semantic"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+target = "replicar"
+english_sense = "replicate = repeat, reproduce"
+alternatives = [{ form = "repetir" }, { form = "reproduir" }]
+scope = "General language only. Replicar = answer back is correct; in finance, 'replicar un índex' is a TERMCAT term."
+evidence = [
+  { source = "DIEC2", id = "DIEC:79216", note = "senses: reply; contradict; (textiles) stain — no 'repeat'" },
+  { source = "TERMCAT", note = "Economia. Empresa: 'Reproduir un índex borsari de referència pel que fa al seu comportament.' — domain exception" },
+  { source = "LanguageTool", ref = "grammar.xml rule REPLICAR_REPETIR", note = "'És un anglicisme en el sentit de \"repetir\".'" },
+]
+controls = ["Ell em va replicar que no hi aniria.", "Aquest fons replica l'índex borsari de referència."]
+
+[[phenomenon]]
+id = "sem.evidencia_proves"
+category = "semantic"
+status = "accepted"
+assessment = "style_preference"
+evidence_level = "explicit"
+target = "evidència"
+english_sense = "evidence = proof, supporting data"
+alternatives = [
+  { form = "prova", gender = "f", plural = "proves" },
+  { form = "indici", gender = "m", plural = "indicis" },
+  { form = "informació probatòria", gender = "f", mass = true },
+]
+scope = "The 'body of evidence' sense in general, non-specialised contexts, where the fitxa says the alternatives can be more natural. The original sense ('qualitat d'evident', 'posar en evidència') and the specialised uses are correct."
+evidence = [
+  { source = "Optimot fitxa", id = "FITXES_PUB:15305", title = "evidència, prova o indici?", quote = "Aquest nou significat, ja acceptat en català, va sorgir inicialment en l'àmbit de la ciència i la medicina" },
+  { source = "Optimot fitxa", id = "FITXES_PUB:15305", quote = "Tots aquests usos es consideren possibles actualment. Malgrat això, cal no oblidar que en català també existeixen les formes prova, informació probatòria o indici [...] que, segons el context, poden resultar més naturals i, fins i tot, més pertinents que evidència." },
+  { source = "DIEC2", id = "DIEC:27227", note = "'Qualitat d'evident'; posar en evidència" },
+  { source = "TERMCAT", note = "'medicina basada en l'evidència', 'evidència científica' (Ciències de la salut)" },
+  { source = "LanguageTool", ref = "grammar.xml rules EVIDENCIA_ARQUEOLOGICA, POCA_EVIDENCIA, L_EVIDENCIA_SUPORTA" },
+]
+controls = [
+  "Això és negar l'evidència.",
+  "La medicina basada en l'evidència guia el tractament.",
+  "No hi ha evidència científica que els aliments estiguin contaminats.",
+  "Durant l'auditoria s'han obtingut prou evidències.",
+]
+notes = "Reviewer proposed normative_error; kept as style_preference because the cited fitxa explicitly accepts the sense ('ja acceptat en català', 'tots aquests usos es consideren possibles') and only recommends the alternatives by context. Optimot's reuse terms also require not misrepresenting the source. Preference items must use general contexts, never the specialised ones listed as controls."
+
+[[phenomenon]]
+id = "sem.collapsar_esfondrar"
+category = "semantic"
+status = "rejected"
+rejection_reason = "TERMCAT (Construcció) attests the structural sense that LanguageTool flags."
+assessment = "disputed"
+evidence_level = "disputed"
+target = "col·lapsar"
+english_sense = "collapse = fall down (a building, a structure)"
+alternatives = [{ form = "esfondrar-se" }, { form = "enfonsar-se" }]
+scope = "Buildings or structures falling down."
+evidence = [
+  { source = "DIEC2", id = "DIEC:14431", note = "senses: produce/suffer a collapse (medical); per ext. traffic" },
+  { source = "TERMCAT", note = "Construcció: 'Deformar-se, una estructura, fins a un punt crític, de manera que hi ha perill que se'n produeixi la caiguda...'" },
+  { source = "LanguageTool", ref = "grammar.xml rule COLLAPSAR", note = "'En el sentit d'esfondrar-se, \"col·lapsar\" és un anglicisme.'" },
+]
+controls = ["Cada matí es col·lapsa el trànsit en aquesta avinguda."]
+notes = "Disputed: TERMCAT's construction sense is close to the flagged use. Suggest dropping."
+
+[[phenomenon]]
+id = "sem.basat_a"
+category = "semantic"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+target = "basat a"
+english_sense = "based in (located in a place)"
+alternatives = [
+  { form = "establert a", agreement = "establert / establerta / establerts / establertes" },
+  { form = "amb seu a", invariable = true, sense = "companies, organisations" },
+  { form = "radicat a", agreement = "radicat / radicada / radicats / radicades" },
+]
+scope = "Locative sense only: where a person or company is established. 'Basat en' (founded on data, a theory) is correct."
+evidence = [
+  { source = "LanguageTool", ref = "grammar.xml rule BASAT_EN", note = "'Amb el sentit de \"radicat a\", aquesta expressió és un calc de l'anglès.'" },
+]
+controls = ["La teoria està basada en dades experimentals."]
+notes = "Split per review: 'amb base a' is left out. LanguageTool's AMB_BASE_EN treats it as locative too ('Uns empresaris amb base a Berlín'), but it also occurs as 'on the basis of' (→ d'acord amb, a partir de), a different calque that would need its own entry. No Optimot/DIEC check done yet."
+
+# =========================================================================================
+# SYNTACTIC — constructions
+# =========================================================================================
+
+[[phenomenon]]
+id = "syn.resultar_en"
+category = "syntactic"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "inferred"
+target = "resultar en"
+english_sense = "result in"
+alternatives = [{ form = "donar com a resultat" }, { form = "ocasionar" }, { form = "provocar" }, { form = "comportar" }]
+scope = "Introducing the consequence with 'en'. 'Resultar de' (originate from) and 'resultar' + adjective are correct."
+evidence = [
+  { source = "DIEC2", id = "DIEC:29340", note = "'Produir-se com a efecte o conseqüència' with 'de' (Els mals que resulten de la guerra); no 'resultar en'" },
+  { source = "LanguageTool", ref = "grammar.xml rule RESULTAR_EN", note = "'Aquesta construcció no és adequada per a introduir les conseqüències d'una acció. És un calc de l'anglès.'" },
+]
+controls = ["Els mals que resulten de la guerra són incalculables.", "La casa ha resultat petita."]
+
+[[phenomenon]]
+id = "syn.consistir_a_infinitiu"
+category = "syntactic"
+status = "rejected"
+rejection_reason = "A Catalan preposition rule (alternation en/a before an infinitive), not an anglicism."
+assessment = "style_preference"
+evidence_level = "explicit"
+target = "consistir en + infinitiu"
+alternatives = [{ form = "consistir a + infinitiu" }]
+scope = "Only before an infinitive. Before a noun, 'consistir en' is the only option."
+evidence = [
+  { source = "Optimot fitxa", id = "FITXES_PUB:16243", title = "Canvi o manteniment de la preposició en davant d'infinitiu", note = "the fitxa distinguishes alternation from a formal-register preference (per your plan's reading)" },
+  { source = "DIEC2", id = "DIEC:14046", note = "examples: 'consisteixen en aquesta casa' (noun) and 'consisteixen a no tenir diplomàcia' (infinitive)" },
+]
+controls = ["La democràcia consisteix en la participació del poble."]
+notes = "The English link ('consist of/in') is weak: this is a preposition-alternation preference in Catalan. Consider moving it out of an *anglicismes* catalog, or keeping it explicitly as a register preference."
+
+[[phenomenon]]
+id = "syn.estar_sent_participi"
+category = "syntactic"
+status = "accepted"
+assessment = "style_preference"
+evidence_level = "inferred"
+target = "estar sent + participi"
+english_sense = "is being + past participle (progressive passive)"
+alternatives = [{ form = "pronominal passive (s'estudiava)" }, { form = "ser + participi (era estudiat)" }, { form = "active voice" }]
+scope = "Progressive passive."
+evidence = [
+  { source = "LanguageTool", ref = "grammar.xml rule ESTA_SENT_FET", note = "'Val més fer servir una altra expressió. Possible calc de l'anglès.'" },
+]
+notes = "LanguageTool's wording ('val més') is a recommendation, hence style_preference. No Optimot fitxa found yet; needs a GIEC check before acceptance."
+
+[[phenomenon]]
+id = "syn.en_addicio"
+category = "syntactic"
+status = "rejected"
+rejection_reason = "DIEC2 itself uses 'en addició' as a gloss in the entry for 'també'."
+assessment = "disputed"
+evidence_level = "disputed"
+target = "en addició (a)"
+english_sense = "in addition (to)"
+alternatives = [{ form = "a més (de)" }]
+scope = "Additive connector."
+evidence = [
+  { source = "LanguageTool", ref = "grammar.xml rule EN_ADDICIO", note = "'Anglicisme inacceptable.'" },
+  { source = "DIEC2", id = "DIEC:32702", quote = "també [...] 1 2 adv. En addició. Hi aniran en Pere i en Joan, i jo també.", note = "DIEC itself uses 'en addició' as a gloss" },
+]
+notes = "Conflict: the normative dictionary uses the expression in a definition. Do not use as a normative error. Suggest rejecting."
+
+[[phenomenon]]
+id = "syn.tambe_ho_fa"
+category = "syntactic"
+status = "accepted"
+assessment = "style_preference"
+evidence_level = "inferred"
+target = "també ho fa / sense fer-ho"
+english_sense = "so does X / without doing so (pro-verb 'do')"
+alternatives = [{ form = "també (with the verb omitted)" }]
+scope = "Redundant pro-verb 'fer-ho' after a previously stated verb."
+evidence = [
+  { source = "LanguageTool", ref = "grammar.xml rules TAMBE_HO_FA, DESPRES_DE_SENSE_FER_HO, QUE_HO_FA_ELL", note = "'Possible calc de l'anglès. Probablement es pot eliminar sense alterar el significat'" },
+]
+notes = "Recommendation-level evidence only; LanguageTool marks it 'possible'. Hard to template as a clean minimal pair."
+
+[[phenomenon]]
+id = "syn.prendre_accio"
+category = "syntactic"
+status = "accepted"
+assessment = "style_preference"
+evidence_level = "inferred"
+target = "prendre acció"
+english_sense = "take action"
+alternatives = [{ form = "prendre mesures" }, { form = "adoptar mesures" }, { form = "passar a l'acció" }, { form = "actuar" }]
+scope = "Fixed phrase."
+evidence = [
+  { source = "LanguageTool", ref = "grammar.xml rule PRENDRE_ACCIÓ", note = "'Calc de l'anglès que val més evitar.'" },
+]
+notes = "Downgraded to style_preference per review: the only source is LanguageTool's 'val més evitar'. No authority source found."
+
+[[phenomenon]]
+id = "syn.gerundi_especificatiu"
+category = "syntactic"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "explicit"
+target = "gerundi especificatiu / de posterioritat"
+english_sense = "a law regulating... (participial modifier); X happened, causing Y (posteriority)"
+alternatives = [
+  { form = "relative clause", example = "una llei que regula..." },
+  { form = "coordinated clause", example = "..., i això va provocar..." },
+]
+scope = "Gerund used as a noun modifier (especificatiu) or for an action after the main one (posterioritat). Gerunds of manner, cause or simultaneity are correct."
+evidence = [
+  { source = "Optimot fitxa", id = "FITXES_PUB:15403", title = "Traducció de textos jurídics: gerundi", quote = "el gerundi expressa, en oracions compostes, una acció anterior o simultània a l'acció que expressa el verb de l'oració principal [...] Per tant, el gerundi no té valor especificatiu, copulatiu ni final." },
+  { source = "GIEC", ref = "§ 24.8.3.2 (especificatiu), § 24.8.4.2 (posterioritat)", note = "Sections cited by the reviewer; not read by the catalog author." },
+]
+origins = ["english", "spanish", "administrative"]
+controls = ["Va arribar corrent.", "Coneixent-lo, no m'estranya gens.", "Llegia escoltant música."]
+notes = "Interference is not exclusively English: the fitxa's examples are translations from Spanish legal texts. Recorded as non-exclusive origins; the test measures the construction, not its cause."
+
+[[phenomenon]]
+id = "syn.possessiu_cos"
+category = "syntactic"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "explicit"
+target = "possessive with body parts"
+english_sense = "raise your hand"
+alternatives = [
+  { form = "definite article", example = "Aixeca la mà." },
+  { form = "possessive dative", example = "Li ploren els ulls." },
+]
+scope = "Body part as direct object or subject, when the possessor is clear from the subject or a dative. Objects and kinship nouns are excluded: there the possessive is possible."
+evidence = [
+  { source = "Optimot fitxa", id = "FITXES_PUB:12963", title = "'Quan fa vent ploren els seus ulls' o 'Quan fa vent li ploren els ulls'? / Datiu possessiu", quote = "quan l'entitat que es posseeix [...] és una part del cos, no se sol expressar aquesta possessió amb un pronom possessiu. Per exemple: Quan fa vent li ploren els ulls (i no ... ploren els seus ulls)." },
+]
+controls = ["El meu cotxe s'ha espatllat.", "S'ha casat la seva filla.", "Avui li fa mal l'esquena."]
+notes = "The fitxa says 'no se sol' (a strong usage norm), not 'és incorrecte'. Its own controls: objects and kinship nouns, where the possessive is possible. Contrastive emphasis on the possessor ('la teva mà, no la seva') must stay out of templates."
+
+[[phenomenon]]
+id = "syn.passiva_datiu"
+category = "syntactic"
+status = "accepted"
+assessment = "normative_error"
+evidence_level = "explicit"
+target = "indirect object as passive subject"
+english_sense = "Mary was given a prize"
+alternatives = [
+  { form = "active voice", example = "Van donar un premi a la Maria." },
+  { form = "pronominal passive", example = "Es va donar un premi a la Maria." },
+  { form = "direct-object passive", example = "Un premi va ser donat a la Maria." },
+]
+scope = "Promoting the recipient (indirect object) to passive subject: *La Maria va ser donada un premi. 'Va ser donat un premi' (the prize as subject) is grammatical."
+evidence = [
+  { source = "Optimot fitxa", id = "FITXES_PUB:12234", title = "Oracions passives / La veu passiva", note = "describes the passive (ser + participle, agent with per/de) and its overuse; does not address indirect objects" },
+  { source = "GIEC", ref = "§ 21.5.1.1", note = "Only the direct object of a transitive verb can be promoted to passive subject, never the indirect object. Section cited by the reviewer; not read by the catalog author." },
+]
+controls = ["El premi va ser lliurat a la Maria.", "Es va donar un premi a la Maria."]
+notes = "Accepted on the reviewer's GIEC citation (§ 21.5.1.1). Templates must keep the grammatical direct-object passive ('Va ser donat un premi') on the correct side."
