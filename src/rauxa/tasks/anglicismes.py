@@ -301,12 +301,18 @@ _LEXICAL: dict[str, _Spec] = {
         "{p} diu que podeu escoltar l'entrevista [al nostre pòdcast|al nostre podcast].",
         "{p} grava [pòdcasts|podcasts] des de casa.",
     ), slots={"topic": ("d'història", "de ciència", "de cuina", "d'economia", "de política", "de música")}),
-    "acc.web": _Spec(frames=(), controls=(
-        "{org} ha estrenat una pàgina web nova.",
-        "{p} dissenya pàgines web per a petites empreses.",
-        "{p} diu que les bases es poden consultar al lloc web.",
-        "{ap} {p} va publicar les fotos a la pàgina web del club.",
-    )),
+    # An accepted loan: no error, controls only. The texts below are what LLM prompts show.
+    "acc.web": _Spec(
+        frames=(),
+        controls=(
+            "{org} ha estrenat una pàgina web nova.",
+            "{p} dissenya pàgines web per a petites empreses.",
+            "{p} diu que les bases es poden consultar al lloc web.",
+            "{ap} {p} va publicar les fotos a la pàgina web del club.",
+        ),
+        error="Cap: «web» és un préstec acceptat (DIEC2); canviar-lo seria una correcció innecessària.",
+        correction="Deixar «web».",
+    ),
 }
 
 _SEMANTIC: dict[str, _Spec] = {
@@ -623,6 +629,30 @@ _SYNTACTIC: dict[str, _Spec] = {
 
 SPECS: dict[str, _Spec] = {**_LEXICAL, **_SEMANTIC, **_SYNTACTIC}
 
+# Where the suspect form is correct, for the LLM writer and judge of control items. The
+# catalog's `scope` describes the error, so it would mislead them.
+_CORRECT_USES: dict[str, str] = {
+    "lex.target": "TARGET as the name of the European payment system (a proper noun).",
+    "lex.adapt.scanner": "the adapted loan 'escàner', which is in DIEC2.",
+    "lex.adapt.stress": "the adapted loan 'estrès', which is in DIEC2.",
+    "lex.adapt.leader": "the adapted loan 'líder', which is in DIEC2.",
+    "acc.web": "'web' for the web as a system ('el web') and in 'pàgina web', 'lloc web'. It is an accepted loan (DIEC2).",
+    "sem.realitzar_adonar": "'realitzar' meaning carry out or accomplish ('realitzar un projecte'), and 'realitzar-se' (self-fulfilment).",
+    "sem.sever": "'sever' about people or style: strict, not indulgent, austere ('un mestre sever', 'un estil sever').",
+    "sem.projectar_preveure": "'projectar' meaning cast light or images, or design a construction ('projectar una pel·lícula', 'projectar un edifici').",
+    "sem.eventualment_finalment": "'eventualment' meaning occasionally or possibly, if it happens ('si eventualment no pogués venir').",
+    "sem.aplicar_sollicitar": "'aplicar' meaning put on, or make a rule, treatment or procedure act on something; 'aplicar-se' meaning make an effort.",
+    "sem.condicio_malaltia": "'condició' as a requirement, a circumstance or a social status ('a condició que', 'en bones condicions').",
+    "sem.allegat_presumpte": "the noun 'al·legat', a plea or statement of reasons ('un al·legat de la defensa').",
+    "sem.replicar_repetir": "'replicar' meaning answer back or object ('va replicar que no'); in finance, 'replicar un índex'.",
+    "sem.basat_a": "'basat en' meaning founded on data, facts or a theory ('basada en fets reals').",
+    "sem.evidencia_proves": "'evidència' as the quality of being evident ('negar l'evidència', 'posar en evidència'), and in specialised uses ('medicina basada en l'evidència', 'evidència científica', audit evidence).",
+    "syn.resultar_en": "'resultar de' (originate from) and 'resultar' + adjective ('va resultar fàcil').",
+    "syn.gerundi_especificatiu": "gerunds of manner, cause, condition or simultaneity ('va arribar corrent', 'estudiant cada dia, aprovaràs').",
+    "syn.possessiu_cos": "possessives with objects and kinship nouns ('la seva bicicleta', 'la seva germana'), where they are normal.",
+    "syn.passiva_datiu": "passives whose subject is the direct object ('El premi va ser lliurat a la Maria') or that take a predicative ('va ser elegida delegada').",
+}
+
 # Rules that flag the incorrect sentences, observed with LanguageTool 6.6 by
 # scripts/languagetool_probe.py. Entries left out are not caught by LanguageTool: lex.email,
 # sem.realitzar_adonar, sem.eventualment_finalment, sem.aplicar_sollicitar, sem.condicio_malaltia,
@@ -708,7 +738,12 @@ def _info(pid: str) -> dict[str, Any]:
         "assessment": entry["assessment"],
         "evidence_level": entry["evidence_level"],
         "kinds": list(_kinds(entry, spec)),
+        "scope": entry.get("scope", ""),
     }
+    if pid in _CORRECT_USES:
+        info["correct_uses"] = _CORRECT_USES[pid]
+    if spec.languagetool_tolerated:
+        info["languagetool_tolerated"] = list(spec.languagetool_tolerated)
     if marker:
         info["marker"] = marker
     return info

@@ -55,6 +55,8 @@ class SourceConfig:
     max_fix_attempts: int = 2  # times the LLM may fix a pair that failed the checks
     phenomena: list[str] = field(default_factory=list)  # default: all of the task's phenomena
     formats: list[str] = field(default_factory=lambda: ["mcq", "judgement", "gec"])
+    # Item kinds to write (pair, preference, control); default: every kind each phenomenon allows.
+    kinds: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -135,12 +137,19 @@ class RunConfig:
                 )
         for dim, shares in self.min_share.items():
             assert sum(shares.values()) <= 1.0 + 1e-9, f"min_share for '{dim}' sums to more than 1"
+        for source in self.sources:
+            for kind in source.kinds:
+                assert kind in ("pair", "preference", "control"), f"unknown kind '{kind}' in a source"
 
     def fingerprint(self) -> str:
         """Hash of the configuration, used to refuse resuming a run with a different config."""
         config = asdict(self)
-        if config["balance_by"] is None:  # unset: same fingerprint as before the option existed
+        # Options left unset don't change the fingerprint, so runs started before they existed resume.
+        if config["balance_by"] is None:
             del config["balance_by"]
+        for source in config["sources"]:
+            if not source["kinds"]:
+                del source["kinds"]
         blob = json.dumps(config, sort_keys=True, ensure_ascii=False)
         return hashlib.sha256(blob.encode()).hexdigest()[:16]
 

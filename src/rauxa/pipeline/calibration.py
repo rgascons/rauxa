@@ -12,7 +12,7 @@ from pathlib import Path
 from random import Random
 from typing import Any, Callable, Iterable, Optional
 
-from .agents import failed_questions
+from .agents import BAD_QUESTIONS, GOOD_QUESTIONS, failed_questions
 
 
 def _load(path: Path) -> list[dict[str, Any]]:
@@ -118,10 +118,11 @@ def calibrate(labels_path: Path, run_dir: Path) -> dict[str, Any]:
         if verdict is None:
             continue
         failed = set(failed_questions(verdict))
+        kind = verdict.get("kind", "pair")
         item.append((item_ok(label), verdict["passed"]))
-        good.append((label["good_ok"], not failed & {"good_is_correct", "variants_are_correct", "natural"}))
-        if label["bad_ok"] is not None:
-            bad.append((label["bad_ok"], not failed & {"bad_has_stated_error", "bad_has_other_errors"}))
+        good.append((label["good_ok"], not failed & GOOD_QUESTIONS[kind]))
+        if label["bad_ok"] is not None and BAD_QUESTIONS[kind]:
+            bad.append((label["bad_ok"], not failed & BAD_QUESTIONS[kind]))
 
     passed_checks = [l for iid, l in labels.items() if checks.get(iid)]
     human_rejected = [l for l in passed_checks if not item_ok(l)]
