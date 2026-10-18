@@ -53,6 +53,17 @@ Each pair renders in one of three formats: `mcq` (pick the correct sentence), `j
 (is it correct? sí/no) and `gec` (correct it). Every item also exports as a BLiMP-style
 minimal pair for log-likelihood scoring.
 
+Besides normative pairs, a task can produce two other kinds of item (`metadata.kind`):
+
+| Kind | What it is | Formats |
+|---|---|---|
+| `pair` (default) | A correct sentence and the same sentence with one normative error | `mcq`, `judgement`, `gec` |
+| `preference` | Both sentences are acceptable; one is preferred in a formal register. Prompts never call the other one incorrect | `mcq` |
+| `control` | One valid sentence, e.g. a legitimate use of a suspect word or an accepted loan. Measures false positives and overcorrection (in `gec`, the right answer is to leave it unchanged) | `judgement`, `gec` |
+
+Any item can carry a `context` shown before it, to fix the intended meaning. `castellanismes_verbals`
+produces plain pairs only.
+
 ## Pipeline
 
 A run is described by one TOML file; [CONFIG.md](CONFIG.md) documents every key, the source

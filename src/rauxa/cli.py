@@ -47,6 +47,11 @@ def cmd_generate(args: argparse.Namespace) -> int:
 def cmd_qc(args: argparse.Namespace) -> int:
     entries = read_jsonl(Path(args.input))
     client = LanguageToolClient(url=args.lt_url, language=args.language, disabled_rules=args.disable_rules)
+    controls = [e for e in entries if e["metadata"].get("sentence_bad") is None]
+    if controls:
+        # A control has no incorrect sentence to flag; the pipeline's languagetool check covers it.
+        print(f"skipping {len(controls)} control items (no incorrect sentence)", file=sys.stderr)
+        entries = [e for e in entries if e["metadata"].get("sentence_bad") is not None]
     kept, stats, rules = [], Counter(), Counter()
     for entry in entries:
         meta = entry["metadata"]
@@ -168,9 +173,13 @@ def cmd_summary(args: argparse.Namespace) -> int:
         print(f"\n{n} random pair{'s' if n != 1 else ''}:")
         for entry in Random(args.seed).sample(items, n):
             meta = entry["metadata"]
-            print(f"\n  [{meta['phenomenon']}, {meta['format']}]")
+            kind = meta.get("kind", "pair")
+            print(f"\n  [{meta['phenomenon']}, {meta['format']}{'' if kind == 'pair' else ', ' + kind}]")
+            if meta.get("context"):
+                print(f"  context: {meta['context']}")
             print(f"  ✓ {meta['sentence_good']}")
-            print(f"  ✗ {meta['sentence_bad']}")
+            if meta.get("sentence_bad") is not None:
+                print(f"  {'≈' if kind == 'preference' else '✗'} {meta['sentence_bad']}")
     return 0
 
 

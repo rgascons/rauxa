@@ -11,9 +11,17 @@ from ..formats import normalize_sentence
 
 
 def item_id(entry: dict[str, Any]) -> str:
-    """Stable id of the underlying sentence pair (format-independent), used for dedup."""
+    """Stable id of the underlying item (format-independent), used for dedup.
+
+    A plain pair is identified by its two sentences, as it always has been. Kind and context
+    join the key only when present, so a control and a pair sharing a sentence, or the same
+    sentences under a different context, are different items while existing ids don't change.
+    """
     meta = entry["metadata"]
-    key = normalize_sentence(meta["sentence_good"]) + "\x00" + normalize_sentence(meta["sentence_bad"])
+    kind, context = meta.get("kind", "pair"), meta.get("context")
+    key = normalize_sentence(meta["sentence_good"]) + "\x00" + normalize_sentence(meta.get("sentence_bad") or "")
+    if kind != "pair" or context:
+        key = f"{kind}\x00{normalize_sentence(context or '')}\x00{key}"
     return hashlib.sha1(key.encode()).hexdigest()[:16]
 
 
