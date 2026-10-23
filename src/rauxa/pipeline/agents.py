@@ -88,8 +88,8 @@ Examples of good items:
 {examples}
 
 Write {n} new items. Requirements:
-- Each "sentence" is natural, fully normative Catalan that contains the form in one of its \
-correct uses, so a careful reviewer would leave it unchanged.
+- Each "sentence" is natural, fully normative Catalan that contains one of the correct uses \
+listed above, so a careful reviewer would leave it unchanged.
 - It must not use the form in the incorrect way above, and must contain no other error.
 - Vary topic, person, tense, sentence length and structure; avoid the example vocabulary.
 - One sentence per item, starting with a capital letter and ending with a period.
@@ -341,12 +341,14 @@ Sentence: «{good}»
 
 Answer with these fields:
 - "sentence_is_correct": is the sentence fully normative as it is?
-- "uses_correct_sense": does it use the form in a correct way, not in the incorrect use described?
-- "contains_the_form": does the sentence contain the form, so that it could tempt a wrong correction?
+- "avoids_the_error": is the sentence free of the incorrect use described above?
+- "matches_a_correct_use": does the sentence contain one of the correct uses listed under "Where \
+the form is correct"? It does not need to contain the incorrect construction itself: a control is \
+useful because it is close to the error without being it.
 - "natural": would a native speaker find the sentence natural?
 - "comment": one short sentence explaining any answer that makes the item bad.
 
-Return: {{"sentence_is_correct": true, "uses_correct_sense": true, "contains_the_form": true, \
+Return: {{"sentence_is_correct": true, "avoids_the_error": true, "matches_a_correct_use": true, \
 "natural": true, "comment": ""}}"""
 
 _JUDGE_TEMPLATES = {"pair": _JUDGE_USER, "preference": _JUDGE_PREFERENCE_USER, "control": _JUDGE_CONTROL_USER}
@@ -359,8 +361,10 @@ KIND_JUDGE_QUESTIONS: dict[str, tuple[str, ...]] = {
     "pair": JUDGE_QUESTIONS,
     "preference": ("good_is_correct", "variants_are_correct", "bad_is_acceptable", "good_is_preferred",
                    "only_stated_difference", "natural", "same_meaning"),
-    "control": ("sentence_is_correct", "uses_correct_sense", "contains_the_form", "natural"),
+    "control": ("sentence_is_correct", "avoids_the_error", "matches_a_correct_use", "natural"),
 }
+# Control questions before they were reworded; verdicts saved with them still count.
+LEGACY_CONTROL_QUESTIONS = ("sentence_is_correct", "uses_correct_sense", "contains_the_form", "natural")
 _NEGATIVE_QUESTIONS = {"pair": ("bad_has_other_errors",), "preference": (), "control": ()}
 
 # Which questions concern the correct sentence(s) and which the other one, for calibration
@@ -368,7 +372,8 @@ _NEGATIVE_QUESTIONS = {"pair": ("bad_has_other_errors",), "preference": (), "con
 GOOD_QUESTIONS = {
     "pair": {"good_is_correct", "variants_are_correct", "natural"},
     "preference": {"good_is_correct", "variants_are_correct", "natural"},
-    "control": {"sentence_is_correct", "uses_correct_sense", "contains_the_form", "natural"},
+    "control": {"sentence_is_correct", "avoids_the_error", "matches_a_correct_use", "natural",
+                *LEGACY_CONTROL_QUESTIONS},
 }
 BAD_QUESTIONS = {
     "pair": {"bad_has_stated_error", "bad_has_other_errors"},
@@ -387,7 +392,10 @@ def failed_questions(verdict: dict[str, Any]) -> list[str]:
     The kind is read from the verdict; verdicts without one are pair verdicts.
     """
     kind = verdict.get("kind", "pair")
-    failed = [k for k in KIND_JUDGE_QUESTIONS[kind] if verdict.get(k) is not True]
+    questions = KIND_JUDGE_QUESTIONS[kind]
+    if kind == "control" and "contains_the_form" in verdict:
+        questions = LEGACY_CONTROL_QUESTIONS
+    failed = [k for k in questions if verdict.get(k) is not True]
     failed += [k for k in _NEGATIVE_QUESTIONS[kind] if verdict.get(k) is not False]
     return failed
 
