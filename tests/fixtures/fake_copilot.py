@@ -12,7 +12,7 @@ import time
 
 FLAGS = (
     "--silent --no-ask-user --available-tools --disable-builtin-mcps --no-custom-instructions "
-    "--no-auto-update --no-bash-env --no-remote --no-remote-export --output-format --model"
+    "--no-auto-update --no-bash-env --sync-session --output-format --model"
 )
 if "--help" in sys.argv:
     print("" if os.environ.get("RAUXA_FAKE_MODE") == "old_cli" else FLAGS)

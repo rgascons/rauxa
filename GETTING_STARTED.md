@@ -168,7 +168,10 @@ Install GitHub Copilot CLI yourself using its
 Check `copilot --version` and `copilot --help` in the shell that will launch rauxa.
 Rauxa checks the selected binary for non-interactive model selection, silent text output,
 disabled tools/MCP/custom instructions, disabled questions/updates/BASH_ENV, and disabled
-remote sessions/export. Unsupported CLI builds fail preflight rather than weakening isolation.
+session sync (`--sync-session=off`). Unsupported CLI builds fail preflight rather than weakening isolation.
+Copilot CLI 1.0.103 removed `--no-remote`: incoming remote control is now set inside a session
+(`/remote off`), so keep it off in the profile rauxa uses. Token-based runs get a fresh, empty
+profile for each request, where it is off.
 
 Authenticate with a supported token environment variable (`COPILOT_GITHUB_TOKEN`, `GH_TOKEN`,
 or `GITHUB_TOKEN`; see the

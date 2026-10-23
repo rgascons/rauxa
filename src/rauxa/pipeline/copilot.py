@@ -22,7 +22,9 @@ from .llm import BackendUnavailable, LLMError, parse_json_object, validate_agent
 FLAGS = (
     "--silent", "--no-ask-user", "--available-tools=", "--disable-builtin-mcps",
     "--no-custom-instructions", "--no-auto-update", "--no-bash-env",
-    "--no-remote", "--no-remote-export", "--output-format=text",
+    # Copilot CLI 1.0.103 replaced --no-remote-export with --sync-session and removed --no-remote:
+    # incoming remote control is now off unless turned on with /remote in a session.
+    "--sync-session=off", "--output-format=text",
 )
 TOKEN_VARS = ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN")
 BENIGN_SETTINGS = {"bashEnv": False}
