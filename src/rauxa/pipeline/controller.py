@@ -38,6 +38,7 @@ from typing import Any, Callable, Optional
 
 from .. import __version__
 from ..factory import create_dataset, get_phenomenon_info
+from ..formats import KIND_FORMATS
 from ..qc.languagetool import LanguageToolClient
 from .agents import Judge, Writer, WrittenPair, failed_questions, llm_entry
 from .checks import build_checks, run_checks
@@ -168,6 +169,11 @@ class Pipeline:
         self.writers = {i: Writer(self.backends[s.backend]) for i, s in enumerate(config.sources) if s.type == "llm"}
         self.judge = Judge(self.backends[config.judge.backend]) if config.judge.enabled else None
         self._datasets: dict[int, Any] = {}
+        self.plans = {i: self._batch_plan(s) for i, s in enumerate(config.sources) if s.type == "llm"}
+        for i, plan in self.plans.items():
+            if not plan:
+                raise PipelineError(f"source {i} ({config.sources[i].task}): no phenomenon allows its kinds and formats")
+        self.allow_unchanged = {s.task: self._allow_unchanged(s.task) for s in config.sources}
 
     # -- setup -------------------------------------------------------------------------
 
@@ -230,6 +236,31 @@ class Pipeline:
             pending |= getattr(backend, "pending", set())
         return pending
 
+    def _batch_plan(self, src: SourceConfig) -> list[tuple[str, str]]:
+        """(phenomenon, kind) of each writer batch, cycled in order.
+
+        Phenomena of tasks without kinds only make pairs. A kind is left out when the source's
+        ``kinds`` or ``formats`` don't allow it.
+        """
+        plan = []
+        for phenomenon in src.phenomena or list(self.info[src.task]):
+            for kind in self.info[src.task][phenomenon].get("kinds", ["pair"]):
+                if (not src.kinds or kind in src.kinds) and set(src.formats) & set(KIND_FORMATS[kind]):
+                    plan.append((phenomenon, kind))
+        return plan
+
+    def _allow_unchanged(self, task: str) -> bool:
+        """Whether this run makes controls for ``task``: then every gec item says a correct
+        sentence may be left unchanged, so the wording doesn't tell controls apart."""
+        for i, src in enumerate(self.cfg.sources):
+            if src.task != task:
+                continue
+            if src.type == "llm" and any(kind == "control" for _, kind in self.plans[i]):
+                return True
+            if src.type == "procedural" and getattr(self._dataset(i, src), "_allow_unchanged", False):
+                return True
+        return False
+
     # -- making candidates -------------------------------------------------------------
 
     def _add_candidate(self, entry: dict[str, Any], source_index: int) -> Optional[dict[str, Any]]:
@@ -266,7 +297,9 @@ class Pipeline:
                 tries = 0
         return out
 
-    def _examples(self, task: str, phenomenon: str, batch_index: int, k: int = 4) -> list[tuple[str, str]]:
+    def _examples(
+        self, task: str, phenomenon: str, batch_index: int, k: int = 4, kind: str = "pair",
+    ) -> list[tuple[str, Optional[str]]]:
         """Example pairs for a writer prompt, different for each batch.
 
         Different examples keep prompts for the same phenomenon distinct: otherwise an agent
@@ -276,13 +309,13 @@ class Pipeline:
             data = create_dataset(task, seed=self.cfg.seed, size=_HUGE, phenomena=(phenomenon,))
         except (AssertionError, TypeError, ValueError):
             return []
-        # Writer examples are normative pairs only; skip preferences and controls. Pair-only
-        # tasks take exactly the k items they always took, so prompts don't change.
+        # Examples of the batch's kind only. Pair-only tasks take exactly the k items they
+        # always took, so prompts don't change.
         examples, j = [], batch_index * k
         while len(examples) < k and j < batch_index * k + 50 * k:
             meta = data[j]["metadata"]
-            if meta.get("kind", "pair") == "pair":
-                examples.append((meta["sentence_good"], meta["sentence_bad"]))
+            if meta.get("kind", "pair") == kind:
+                examples.append((meta["sentence_good"], meta.get("sentence_bad")))
             j += 1
         return examples
 
@@ -293,6 +326,7 @@ class Pipeline:
             rng=Random(f"{self.cfg.seed}:{pair.good}:{pair.bad}"),
             languagetool_rules=info.get("languagetool_rules", []),
             writer_model=self.backends[src.backend].model, revision_of=revision_of,
+            info=info, allow_unchanged=self.allow_unchanged[src.task],
         )
 
     def _make_llm(self, i: int, src: SourceConfig, n: int) -> list[dict[str, Any]]:
@@ -300,7 +334,7 @@ class Pipeline:
             return self._make_agent_llm(i, src)
         st = self.state["sources"][str(i)]
         n = min(n, src.count - st["requested"])
-        phenomena = src.phenomena or list(self.info[src.task])
+        plan = self.plans[i]
         out: list[dict[str, Any]] = []
         consecutive_errors = 0
         waiting_offset = 0  # batches handed to an agent and not answered yet
@@ -308,11 +342,13 @@ class Pipeline:
         self.progress.update(label, 0, total)
         while n > 0 and consecutive_errors < 3:
             batch_index = (st["requested"] + waiting_offset) // max(src.batch_size, 1)
-            phenomenon = phenomena[batch_index % len(phenomena)]
+            phenomenon, kind = plan[batch_index % len(plan)]
             k = min(src.batch_size, n)
             try:
-                examples = self._examples(src.task, phenomenon, batch_index)
-                pairs = self.writers[i].write(self.info[src.task][phenomenon], examples, k, key=f"write:{i}:{batch_index}")
+                examples = self._examples(src.task, phenomenon, batch_index, kind=kind)
+                pairs = self.writers[i].write(
+                    self.info[src.task][phenomenon], examples, k, kind=kind, key=f"write:{i}:{batch_index}",
+                )
                 consecutive_errors = 0
             except AwaitingAgent:
                 waiting_offset += k
@@ -339,18 +375,18 @@ class Pipeline:
             raise PipelineError("agent sources need a positive batch_size and nonnegative count")
         st = self.state["sources"][str(i)]
         batches = st.setdefault("batches", {})
-        phenomena = src.phenomena or list(self.info[src.task])
+        plan = self.plans[i]
         out = []
         for batch, start in enumerate(range(0, src.count, src.batch_size)):
             key = str(batch)
             if key in batches:
                 continue
             k = min(src.batch_size, src.count - start)
-            phenomenon = phenomena[batch % len(phenomena)]
+            phenomenon, kind = plan[batch % len(plan)]
             try:
                 pairs = self.writers[i].write(
-                    self.info[src.task][phenomenon], self._examples(src.task, phenomenon, batch), k,
-                    key=f"write:{i}:{batch}",
+                    self.info[src.task][phenomenon], self._examples(src.task, phenomenon, batch, kind=kind), k,
+                    kind=kind, key=f"write:{i}:{batch}",
                 )
             except AwaitingAgent:
                 continue
@@ -445,7 +481,8 @@ class Pipeline:
                 failing = next(r for r in self.check_records[iid]["results"] if not r["passed"])
                 problems = [f"{failing['check']}: {json.dumps(failing['details'], ensure_ascii=False)}"]
                 pair = WrittenPair(meta["sentence_good"], meta["sentence_bad"],
-                                   [v for v in meta["correct_variants"] if v != meta["sentence_good"]])
+                                   [v for v in meta["correct_variants"] if v != meta["sentence_good"]],
+                                   meta.get("kind", "pair"), meta.get("context"))
                 try:
                     fixed = self.writers[i].fix(
                         self.info[src.task][meta["phenomenon"]], pair, problems, key=f"fix:{i}:{iid}",

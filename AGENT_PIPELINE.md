@@ -106,14 +106,21 @@ For each `<id>.md`:
 
 There are three kinds of request:
 
-- **Write** (asks for "new pairs"): return exactly the number of items asked for. Each pair is
-  a fully correct Catalan sentence and the same sentence with only the stated error. Vary topics
-  and structures; don't reuse the example sentences.
+- **Write** (asks for "new pairs" or "new items"): return exactly the number of items asked
+  for, in the shape the request's `Return:` line shows. Vary topics and structures; don't reuse
+  the example sentences. Some tasks (`anglicismes`) have three kinds of write request, told apart
+  by the System section:
+  - a *minimal pair*: a fully correct sentence and the same sentence with only the stated error;
+  - a *preference pair*: two acceptable sentences, the first preferred in a formal register. The
+    second one is not an error;
+  - a *control*: one correct sentence that uses a form often mistaken for an error, in a correct
+    way. These items have a single `"sentence"` field.
 - **Fix** (says the item "did not pass our checks"): rewrite the item so the listed problems go
-  away while keeping the requirements.
+  away while keeping the requirements. Keep the item's shape.
 - **Judge** (the System section starts "You are a strict reviewer"): give your honest verdict
-  on each question. You are checking work, possibly your own: don't default to `true`. If a
-  sentence is unnatural, has a second error, or the "correct" one isn't normative, say so.
+  on each question the request lists (they differ for pairs, preferences and controls). You are
+  checking work, possibly your own: don't default to `true`. If a sentence is unnatural, has a
+  second error, or the "correct" one isn't normative, say so.
 
 Rules that keep the run meaningful:
 

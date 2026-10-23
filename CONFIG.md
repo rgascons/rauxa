@@ -123,10 +123,20 @@ there are no controls. Use `[min_share.kind]` and `[min_share.category]` to requ
 | `count` | `0` | Pairs to **request** in total. The writer may send back more per batch than asked, and all valid ones are kept, so the number of LLM candidates can exceed `count`. Fixes come on top |
 | `batch_size` | `20` | Pairs asked for per call. Each batch is about one phenomenon |
 | `phenomena` | all of the task's | Phenomena to write about. Batches cycle through them in order |
+| `kinds` | every kind each phenomenon allows | Item kinds to write: `pair`, `preference`, `control`. Only for tasks with kinds (`anglicismes`); tasks without them only write pairs |
 | `formats` | `["mcq", "judgement", "gec"]` | Each written pair is rendered in one of these, chosen at random (seeded by the pair) |
 | `max_fix_attempts` | `2` | Times a pair that failed a check is sent back to the writer to fix. Each fix is a new candidate, checked again. `0` disables fixing |
 
 `weight` and `[sources.params]` are ignored for LLM sources.
+
+For a task with kinds, each batch is one phenomenon and one kind, and batches cycle through
+every (phenomenon, kind) the source allows: a kind is skipped when `kinds` leaves it out or
+none of `formats` suits it (preferences need `mcq`; controls need `judgement` or `gec`). The
+writer has a prompt per kind: a pair has an error, a preference has two acceptable sentences
+of which one suits a formal register better, and a control is one correct sentence using a
+form often mistaken for an error. It may add a `context` when the meaning needs fixing. Fixes
+keep the item's kind. With `formats = ["mcq"]`, for example, an `anglicismes` source writes
+no controls.
 
 ## `[checks]`
 
@@ -182,6 +192,18 @@ only if all answers are right.
 
 `mode` and `source_types` apply to the whole judge: you can't filter one source type and audit
 another in the same run.
+
+The judge's questions depend on the item kind, and an item passes when every answer is the
+expected one:
+
+| Kind | Questions |
+|---|---|
+| `pair` | `good_is_correct`, `variants_are_correct`, `bad_has_stated_error`, `bad_has_other_errors` (must be false), `natural`, `same_meaning` |
+| `preference` | `good_is_correct`, `variants_are_correct`, `bad_is_acceptable`, `good_is_preferred`, `only_stated_difference`, `natural`, `same_meaning` |
+| `control` | `sentence_is_correct`, `uses_correct_sense`, `contains_the_form`, `natural` |
+
+An item's `context`, if it has one, is shown to the judge too. Verdicts for preferences and
+controls store their `kind`; the manifest's `failed_questions` counts every question across kinds.
 
 Judge quality itself can be measured against native-speaker labels with `rauxa review` and
 `rauxa calibrate` (see the [README](README.md#safeguards)).

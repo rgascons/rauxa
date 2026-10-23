@@ -82,15 +82,23 @@ def validate_agent_answer(value: Any, kind: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise LLMError("answer must be a JSON object")
     if kind == "judge":
-        keys = ("good_is_correct", "variants_are_correct", "bad_has_stated_error",
-                "bad_has_other_errors", "natural", "same_meaning")
-        if any(type(value.get(k)) is not bool for k in keys) or not isinstance(value.get("comment"), str):
-            raise LLMError("judge answer needs all six boolean verdicts and a string comment")
+        from .agents import verdict_keys  # agents imports this module
+
+        # The answer's shape tells the item kind (pair, preference or control).
+        shapes = [verdict_keys(k) for k in ("pair", "preference", "control")]
+        complete = any(all(type(value.get(k)) is bool for k in keys) for keys in shapes)
+        if not complete or not isinstance(value.get("comment"), str):
+            raise LLMError("judge answer needs every boolean verdict the request asks for and a string comment")
     else:
         pairs = value.get("items") if kind == "write" else [value]
         if not isinstance(pairs, list) or not pairs:
             raise LLMError("writer answer needs a nonempty items array")
         for pair in pairs:
+            if isinstance(pair, dict) and "sentence" in pair and "good" not in pair:
+                # A control: one sentence.
+                if not isinstance(pair["sentence"], str) or not pair["sentence"].strip():
+                    raise LLMError("each control needs a nonempty sentence string")
+                continue
             if not isinstance(pair, dict) or any(
                 not isinstance(pair.get(k), str) or not pair[k].strip() for k in ("good", "bad")
             ):
