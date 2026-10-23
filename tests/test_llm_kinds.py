@@ -49,7 +49,7 @@ class KindsBackend:
         if system.startswith("You are a Catalan linguist"):
             return {"items": ITEMS[kind]}
         if "control item" in user:
-            return {"sentence_is_correct": True, "uses_correct_sense": True, "contains_the_form": True, "natural": True, "comment": ""}
+            return {"sentence_is_correct": True, "avoids_the_error": True, "matches_a_correct_use": True, "natural": True, "comment": ""}
         if "preference, not an error" in user:
             verdict = {"good_is_correct": True, "variants_are_correct": True, "bad_is_acceptable": True, "good_is_preferred": True,
                        "only_stated_difference": True, "natural": True, "same_meaning": True, "comment": ""}
@@ -167,7 +167,7 @@ class TestAnswers(unittest.TestCase):
     def test_agent_answers_by_kind(self):
         validate_agent_answer({"items": [{"sentence": "Correcta."}]}, "write")
         validate_agent_answer({"sentence": "Correcta."}, "fix")
-        validate_agent_answer({"sentence_is_correct": True, "uses_correct_sense": True, "contains_the_form": True,
+        validate_agent_answer({"sentence_is_correct": True, "avoids_the_error": True, "matches_a_correct_use": True,
                                "natural": True, "comment": ""}, "judge")
         with self.assertRaises(LLMError):
             validate_agent_answer({"items": [{"sentence": ""}]}, "write")
@@ -175,8 +175,13 @@ class TestAnswers(unittest.TestCase):
             validate_agent_answer({"sentence_is_correct": True, "natural": True, "comment": ""}, "judge")
 
     def test_failed_questions_by_kind(self):
-        self.assertEqual(failed_questions({"kind": "control", "sentence_is_correct": True, "uses_correct_sense": False,
-                                           "contains_the_form": True, "natural": True}), ["uses_correct_sense"])
+        self.assertEqual(failed_questions({"kind": "control", "sentence_is_correct": True, "avoids_the_error": False,
+                                           "matches_a_correct_use": True, "natural": True}), ["avoids_the_error"])
+        # Verdicts saved with the earlier control questions still count.
+        legacy = {"kind": "control", "sentence_is_correct": True, "uses_correct_sense": True,
+                  "contains_the_form": True, "natural": True, "comment": ""}
+        self.assertEqual(failed_questions(legacy), [])
+        validate_agent_answer(legacy, "judge")
         old = {"good_is_correct": True, "variants_are_correct": True, "bad_has_stated_error": True,
                "bad_has_other_errors": True, "natural": True, "same_meaning": True}
         self.assertEqual(failed_questions(old), ["bad_has_other_errors"])  # no kind: a pair verdict
@@ -190,6 +195,25 @@ class TestAnswers(unittest.TestCase):
 
         written = Writer(Fixed()).write(PHENOMENON_INFO["sem.realitzar_adonar"], [], 2, kind="control")
         self.assertEqual(written, [WrittenPair("Va realitzar el projecte.", None, [], "control", None)])
+
+
+class TestVariantCheck(unittest.TestCase):
+    def test_far_variant_fails_the_minimal_pair_check(self):
+        from rauxa.pipeline.checks import MinimalPairCheck
+
+        good = "L'equip local juga diumenge i el juvenil també."
+        bad = "L'equip local juga diumenge i el juvenil també ho fa."
+        near = "L'equip local juga dissabte i el juvenil també."
+        far = "La coral gran assaja avui i la juvenil també."
+        check = MinimalPairCheck(8)
+
+        def entry(variants):
+            return {"metadata": {"sentence_good": good, "sentence_bad": bad, "correct_variants": variants}}
+
+        self.assertTrue(check.run(entry([good, near])).passed)
+        result = check.run(entry([good, far]))
+        self.assertFalse(result.passed)
+        self.assertEqual(result.details["variants_too_far"], [far])
 
 
 class TestUnchangedPrompts(unittest.TestCase):

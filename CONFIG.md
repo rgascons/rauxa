@@ -200,7 +200,7 @@ expected one:
 |---|---|
 | `pair` | `good_is_correct`, `variants_are_correct`, `bad_has_stated_error`, `bad_has_other_errors` (must be false), `natural`, `same_meaning` |
 | `preference` | `good_is_correct`, `variants_are_correct`, `bad_is_acceptable`, `good_is_preferred`, `only_stated_difference`, `natural`, `same_meaning` |
-| `control` | `sentence_is_correct`, `uses_correct_sense`, `contains_the_form`, `natural` |
+| `control` | `sentence_is_correct`, `avoids_the_error`, `matches_a_correct_use` (one of the entry's listed correct uses), `natural` |
 
 An item's `context`, if it has one, is shown to the judge too. Verdicts for preferences and
 controls store their `kind`; the manifest's `failed_questions` counts every question across kinds.

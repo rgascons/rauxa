@@ -82,10 +82,10 @@ def validate_agent_answer(value: Any, kind: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise LLMError("answer must be a JSON object")
     if kind == "judge":
-        from .agents import verdict_keys  # agents imports this module
+        from .agents import LEGACY_CONTROL_QUESTIONS, verdict_keys  # agents imports this module
 
         # The answer's shape tells the item kind (pair, preference or control).
-        shapes = [verdict_keys(k) for k in ("pair", "preference", "control")]
+        shapes = [verdict_keys(k) for k in ("pair", "preference", "control")] + [LEGACY_CONTROL_QUESTIONS]
         complete = any(all(type(value.get(k)) is bool for k in keys) for keys in shapes)
         if not complete or not isinstance(value.get("comment"), str):
             raise LLMError("judge answer needs every boolean verdict the request asks for and a string comment")

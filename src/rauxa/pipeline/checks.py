@@ -106,7 +106,11 @@ class MarkerCheck:
 
 
 class MinimalPairCheck:
-    """The incorrect sentence must differ from the correct one by a single small edit."""
+    """The incorrect sentence must differ from each correct variant by a single small edit.
+
+    Checking every variant, not only ``sentence_good``, keeps far-off rewrites out of the
+    accepted gec answers. They are listed under ``variants_too_far`` when the check fails.
+    """
 
     name = "minimal_pair"
 
@@ -114,12 +118,19 @@ class MinimalPairCheck:
         self.max_edit_tokens = max_edit_tokens
 
     def run(self, entry: dict[str, Any]) -> CheckResult:
-        good, bad, _ = _sentences(entry)
+        good, bad, variants = _sentences(entry)
         if bad is None:
             return CheckResult(self.name, True, {"skipped": "control"})
         span_good, span_bad, shared = edit_span(good, bad)
-        ok = 0 < max(span_good, span_bad) <= self.max_edit_tokens and shared > 0
-        return CheckResult(self.name, ok, {"span_good": span_good, "span_bad": span_bad, "shared": shared})
+        ok = self._minimal(span_good, span_bad, shared)
+        details: dict[str, Any] = {"span_good": span_good, "span_bad": span_bad, "shared": shared}
+        too_far = [v for v in variants if v != good and not self._minimal(*edit_span(v, bad))]
+        if too_far:
+            details["variants_too_far"] = too_far
+        return CheckResult(self.name, ok and not too_far, details)
+
+    def _minimal(self, span_a: int, span_b: int, shared: int) -> bool:
+        return 0 < max(span_a, span_b) <= self.max_edit_tokens and shared > 0
 
 
 class LanguageToolCheck:
