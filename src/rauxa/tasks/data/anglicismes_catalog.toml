@@ -80,7 +80,7 @@ notes = "Not in LanguageTool's replace list; the fitxa is the strongest explicit
 id = "lex.bullying"
 category = "lexical"
 status = "accepted"
-assessment = "normative_error"
+assessment = "style_preference"
 evidence_level = "explicit"
 english = ["bullying"]
 alternatives = [{ form = "assetjament escolar", gender = "m", mass = true }]
@@ -89,7 +89,9 @@ evidence = [
   { source = "Optimot fitxa", id = "FITXES_PUB:15914", title = "Com es diu bullying en català?", quote = "En l'àmbit escolar, l'equivalent català de la paraula anglesa bullying és assetjament escolar." },
   { source = "DIEC2", note = "no entry for bullying" },
   { source = "LanguageTool", ref = "replace_anglicism.txt:120" },
+  { source = "Reviewer", note = "2026-10-24: accepted in informal and semi-formal settings; the Catalan term is preferred in a formal register." },
 ]
+notes = "Moved from normative_error to style_preference in review (2026-10-24): the loan is accepted in informal and semi-formal settings, so it becomes a formal-register preference, never an error."
 
 [[phenomenon]]
 id = "lex.coffee_break"
@@ -192,7 +194,7 @@ evidence = [
 id = "lex.startup"
 category = "lexical"
 status = "accepted"
-assessment = "normative_error"
+assessment = "style_preference"
 evidence_level = "inferred"
 english = ["startup", "start-up", "startups", "start-ups"]
 alternatives = [{ form = "empresa emergent", gender = "f", plural = "empreses emergents" }]
@@ -201,7 +203,9 @@ evidence = [
   { source = "TERMCAT", note = "empresa emergent (Economia. Empresa; TIC)" },
   { source = "DIEC2", note = "no entry for startup" },
   { source = "LanguageTool", ref = "replace_anglicism.txt:151" },
+  { source = "Reviewer", note = "2026-10-24: accepted in informal and semi-formal settings; the Catalan term is preferred in a formal register." },
 ]
+notes = "Moved from normative_error to style_preference in review (2026-10-24): the loan is accepted in informal and semi-formal settings, so it becomes a formal-register preference, never an error."
 
 [[phenomenon]]
 id = "lex.stakeholder"
@@ -222,7 +226,7 @@ evidence = [
 id = "lex.coworking"
 category = "lexical"
 status = "accepted"
-assessment = "normative_error"
+assessment = "style_preference"
 evidence_level = "inferred"
 english = ["coworking"]
 alternatives = [{ form = "cotreball", gender = "m", mass = true }, { form = "espai de cotreball", gender = "m", plural = "espais de cotreball", sense = "the place" }]
@@ -231,7 +235,9 @@ evidence = [
   { source = "TERMCAT", note = "cotreball; espai de cotreball (Ciències socials)" },
   { source = "DIEC2", note = "no entry for coworking" },
   { source = "LanguageTool", ref = "replace_anglicism.txt:24" },
+  { source = "Reviewer", note = "2026-10-24: accepted in informal and semi-formal settings; the Catalan term is preferred in a formal register." },
 ]
+notes = "Moved from normative_error to style_preference in review (2026-10-24): the loan is accepted in informal and semi-formal settings, so it becomes a formal-register preference, never an error."
 
 [[phenomenon]]
 id = "lex.spam"
