@@ -268,8 +268,9 @@ be automatically adopted safely; use a fresh run name for Copilot dispatch.
   ```
 
 - **Have a native speaker check a sample.** `rauxa review` shows pairs one at a time and saves
-  the answers; `rauxa calibrate` then reports how many pairs they rejected and, if you used a
-  judge, how often it agreed with them:
+  the answers. Answer each question with a single key, `s` (yes), `n` (no) or `q` (stop), without
+  Enter; it asks for an optional comment only when you answer `n`. `rauxa calibrate` then reports
+  how many pairs they rejected and, if you used a judge, how often it agreed with them:
 
   ```bash
   rauxa review out/runs/castellanismes_procedural/dataset.jsonl out/labels.jsonl --n 100 --reviewer your-name

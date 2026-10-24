@@ -1,6 +1,8 @@
 """Human review, and how well the LLM judge and automatic checks match it.
 
-``review`` shows a sample of pairs to a native speaker in the terminal and stores labels.
+``review`` shows a sample of pairs to a native speaker in the terminal and stores labels. Each
+question takes a single keypress (s/n/q, no Enter); a comment is asked for only when an answer
+is "no".
 ``calibrate`` compares those labels with the judge's verdicts (agreement, Cohen's kappa) and
 measures how many pairs that passed the automatic checks a human would still reject.
 """
@@ -8,6 +10,7 @@ measures how many pairs that passed the automatic checks a human would still rej
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from random import Random
 from typing import Any, Callable, Iterable, Optional
@@ -22,9 +25,33 @@ def _load(path: Path) -> list[dict[str, Any]]:
         return [json.loads(line) for line in f if line.strip()]
 
 
-def _ask(prompt: str, input_fn: Callable[[str], str]) -> Optional[bool]:
+def _read_key(prompt: str) -> str:
+    """Read one keypress without waiting for Enter, echoing it. Ctrl-C still interrupts."""
+    print(prompt, end="", flush=True)
+    try:
+        import termios
+        import tty
+    except ImportError:  # Windows
+        import msvcrt
+
+        key = msvcrt.getwch()
+    else:
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(fd)
+            key = sys.stdin.read(1)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+    if key == "\x03":
+        raise KeyboardInterrupt
+    print(key if key.isprintable() else "")
+    return key
+
+
+def _ask(prompt: str, key_fn: Callable[[str], str]) -> Optional[bool]:
     while True:
-        answer = input_fn(prompt).strip().lower()
+        answer = key_fn(prompt).strip().lower()
         if answer in ("s", "sí", "si", "y"):
             return True
         if answer in ("n", "no"):
@@ -36,8 +63,15 @@ def _ask(prompt: str, input_fn: Callable[[str], str]) -> Optional[bool]:
 def review(
     items_path: Path, labels_path: Path, *, n: int, seed: int, reviewer: str,
     input_fn: Callable[[str], str] = input, print_fn: Callable[..., None] = print,
+    key_fn: Optional[Callable[[str], str]] = None,
 ) -> int:
-    """Label up to ``n`` randomly sampled items not yet labelled. Returns how many were labelled."""
+    """Label up to ``n`` randomly sampled items not yet labelled. Returns how many were labelled.
+
+    Questions read a single key with ``key_fn``: by default one keypress in a terminal, and
+    ``input_fn`` (a line) otherwise, e.g. when input is piped or in tests.
+    """
+    if key_fn is None:
+        key_fn = _read_key if input_fn is input and sys.stdin.isatty() else input_fn
     items = _load(items_path)
     done = {label["item_id"] for label in _load(labels_path)}
     todo = [e for e in items if e["metadata"]["item_id"] not in done]
@@ -55,23 +89,24 @@ def review(
         for v in others:
             print_fn(f"  ✓ {v}")
         if kind == "control":
-            good_ok = _ask("  La frase ✓ és correcta i natural (sense cap error)? [s/n/q] ", input_fn)
+            good_ok = _ask("  La frase ✓ és correcta i natural (sense cap error)? [s/n/q] ", key_fn)
             if good_ok is None:
                 break
             bad_ok = None  # a control has no second sentence to judge
         else:
             print_fn(f"  {'≈' if kind == 'preference' else '✗'} {meta['sentence_bad']}")
-            good_ok = _ask("  Les frases ✓ són correctes i naturals? [s/n/q] ", input_fn)
+            good_ok = _ask("  Les frases ✓ són correctes i naturals? [s/n/q] ", key_fn)
             if good_ok is None:
                 break
             question = (
                 "  La frase ≈ és acceptable però menys adequada en un registre formal? [s/n/q] "
                 if kind == "preference" else "  La frase ✗ conté només l'error esperat? [s/n/q] "
             )
-            bad_ok = _ask(question, input_fn)
+            bad_ok = _ask(question, key_fn)
             if bad_ok is None:
                 break
-        note = input_fn("  Comentari (opcional): ").strip()
+        # Only a rejection needs explaining; accepted items go straight to the next one.
+        note = input_fn("  Comentari (opcional, Enter per continuar): ").strip() if False in (good_ok, bad_ok) else ""
         with labels_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps({
                 "item_id": meta["item_id"], "good_ok": good_ok, "bad_ok": bad_ok,
