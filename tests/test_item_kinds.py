@@ -232,11 +232,35 @@ class TestPipelineAndReview(unittest.TestCase):
 
             n = review(items_path, labels_path, n=2, seed=0, reviewer="t", input_fn=answer, print_fn=printed.append)
             self.assertEqual(sum("[s/n/q]" in p for p in asked), 3)  # two for the preference, one for the control
+            self.assertFalse(any("Comentari" in p for p in asked))  # nothing rejected, no comment asked
             self.assertEqual(n, 2)
             self.assertTrue(any(line.startswith("  Context: ") for line in printed))
             labels = [json.loads(l) for l in labels_path.read_text(encoding="utf-8").splitlines()]
             control_label = next(l for l in labels if l["item_id"] == entries[1]["metadata"]["item_id"])
             self.assertIsNone(control_label["bad_ok"])
+
+    def test_review_reads_single_keys_and_asks_comment_only_on_rejection(self):
+        from rauxa.pipeline.calibration import review
+
+        with tempfile.TemporaryDirectory() as tmp:
+            items_path, labels_path = Path(tmp) / "items.jsonl", Path(tmp) / "labels.jsonl"
+            entries = [_item(3), _item(4)]  # a pair, then a preference
+            for e in entries:
+                e["metadata"]["item_id"] = item_id(e)
+            items_path.write_text("".join(json.dumps(e, ensure_ascii=False) + "\n" for e in entries), encoding="utf-8")
+            keys = iter("x" "s" "n" "s" "s")  # an unknown key is asked again
+            lines = []
+
+            def line(prompt):
+                lines.append(prompt)
+                return "massa llarga"
+
+            n = review(items_path, labels_path, n=2, seed=0, reviewer="t",
+                       input_fn=line, print_fn=lambda *_: None, key_fn=lambda _: next(keys))
+            self.assertEqual(n, 2)
+            self.assertEqual(len(lines), 1)  # one comment, for the item with a "no"
+            labels = [json.loads(l) for l in labels_path.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual([l["note"] for l in labels].count("massa llarga"), 1)
 
 
 if __name__ == "__main__":
