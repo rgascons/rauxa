@@ -207,11 +207,8 @@ _LEXICAL: dict[str, _Spec] = {
         "{org} vol arribar a [un públic objectiu|un target] més ampli.",
         "{ap} {p} va analitzar [el públic objectiu|el target] abans de dissenyar l'anunci.",
         "{p} diu que aquest producte té [un públic objectiu|un target] molt definit.",
-    ), controls=(
-        "Els bancs liquiden els pagaments a través del sistema TARGET.",
-        "El Banc Central Europeu gestiona el sistema de pagaments TARGET.",
-        "{ap} el banc de {author} va fer la transferència pel sistema TARGET.",
-    ), languagetool_tolerated=("CA_SIMPLE_REPLACE_ANGLICISM_TARGET",), slots={"org_bare": ("l'ajuntament", "l'empresa", "la universitat", "la biblioteca", "la cooperativa", "la fundació")}),
+    # No controls: the TARGET payment system read as nonsense to a native reviewer (2026-10-24).
+    ), slots={"org_bare": ("l'ajuntament", "l'empresa", "la universitat", "la biblioteca", "la cooperativa", "la fundació")}),
     "lex.know_how": _Spec(frames=(
         "{p} aporta molt de [saber fer|know-how/know how] a l'equip.",
         "[El saber fer|El know-how/El know how] de {org_bare} és el seu principal actiu.",
@@ -632,7 +629,6 @@ SPECS: dict[str, _Spec] = {**_LEXICAL, **_SEMANTIC, **_SYNTACTIC}
 # Where the suspect form is correct, for the LLM writer and judge of control items. The
 # catalog's `scope` describes the error, so it would mislead them.
 _CORRECT_USES: dict[str, str] = {
-    "lex.target": "TARGET as the name of the European payment system (a proper noun).",
     "lex.adapt.scanner": "the adapted loan 'escàner', which is in DIEC2.",
     "lex.adapt.stress": "the adapted loan 'estrès', which is in DIEC2.",
     "lex.adapt.leader": "the adapted loan 'líder', which is in DIEC2.",
@@ -723,9 +719,13 @@ def _info(pid: str) -> dict[str, Any]:
     alternatives = " / ".join(f"«{a['form']}»" for a in entry.get("alternatives", []))
     if entry["category"] == "lexical":
         adapted = pid.startswith("lex.adapt.")
-        error = spec.error or (
-            f"Grafia no adaptada «{entry['english'][0]}»." if adapted else f"Anglicisme «{entry['english'][0]}»."
-        )
+        if adapted:
+            default_error = f"Grafia no adaptada «{entry['english'][0]}»."
+        elif entry["assessment"] == "style_preference":
+            default_error = f"Anglicisme «{entry['english'][0]}», admès en registres informals i semiformals."
+        else:
+            default_error = f"Anglicisme «{entry['english'][0]}»."
+        error = spec.error or default_error
         marker = spec.marker or _english_marker(entry["english"])
     else:
         error, marker = spec.error, spec.marker
